@@ -26,6 +26,7 @@ from mailwyrm.oauth import (
     token_is_expired,
 )
 from mailwyrm.store import read_state, read_token, write_state, write_token
+from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
 
 
 SYNC_MAILBOXES = ("inbox", "all-mail")
@@ -228,16 +229,14 @@ def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
         max_results=limit,
         label_ids=label_ids_for_mailbox(mailbox),
     )
+    stats = SyncStats()
     for message_ref in message_refs:
         message = client.get_message_metadata(str(message_ref["id"]))
         record = MessageRecord.from_gmail_message(message)
-        state.messages[record.id] = record
+        stats = refresh_message_from_gmail(state, record, stats)
 
     write_state(state_path(), state)
-    print(
-        f"Synced {len(message_refs)} {mailbox} message(s) for "
-        f"{state.account_email or 'unknown account'}."
-    )
+    print(render_sync_summary(stats, mailbox, state.account_email))
     print(f"Local index: {state_path()}")
     return 0
 
