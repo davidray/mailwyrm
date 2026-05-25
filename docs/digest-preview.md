@@ -2,7 +2,7 @@
 
 This spike renders a local machine-mail digest from synced and classified Gmail metadata.
 
-It intentionally does not write Gmail labels, archive, trash, mark read, or mutate mailbox state.
+It intentionally does not write Gmail labels, archive, trash, mark read, or mutate Gmail mailbox state.
 
 ## Commands
 
@@ -35,3 +35,4 @@ The Markdown digest groups items into:
 
 Each item includes a Gmail link, sender, importance, automation safety, confidence, reason, and snippet.
 
+When a digest is rendered, Mailwyrm records local digest audit events for the messages included in that digest. Archive automation uses those local events as a gate, so `archive_after_digest` messages are not archived until they have appeared in a digest.

@@ -1,6 +1,6 @@
 import unittest
 
-from mailwyrm.digest import render_digest
+from mailwyrm.digest import mark_digest_items, message_has_been_digested, render_digest
 from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
@@ -163,6 +163,52 @@ class DigestTest(unittest.TestCase):
         self.assertIn("Sender \\]\\(https://bad.example\\)", digest)
         self.assertIn("Reason \\]\\(https://bad.example\\)", digest)
         self.assertIn("Click \\]\\(https://bad.example\\) \\*now\\*", digest)
+
+    def test_mark_digest_items_records_included_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Your receipt"),
+                "msg-2": message("msg-2", "Re: dinner"),
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="transactional",
+                ),
+                "msg-2": classification("msg-2", category="human", machine_type=None),
+            },
+        )
+
+        marked = mark_digest_items(state, title_date="2026-05-25")
+
+        self.assertEqual(marked, 1)
+        self.assertTrue(message_has_been_digested(state, "msg-1"))
+        self.assertFalse(message_has_been_digested(state, "msg-2"))
+        self.assertEqual(state.digest_audit_events[0].message_id, "msg-1")
+        self.assertEqual(
+            state.digest_audit_events[0].reason,
+            "Automated sender or subject pattern.",
+        )
+
+    def test_mark_digest_items_is_idempotent_for_same_digest_date(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Your receipt")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="transactional",
+                )
+            },
+        )
+
+        first_marked = mark_digest_items(state, title_date="2026-05-25")
+        second_marked = mark_digest_items(state, title_date="2026-05-25")
+
+        self.assertEqual(first_marked, 1)
+        self.assertEqual(second_marked, 0)
+        self.assertEqual(len(state.digest_audit_events), 1)
 
 
 if __name__ == "__main__":

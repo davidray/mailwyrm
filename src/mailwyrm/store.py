@@ -9,6 +9,7 @@ from typing import Any
 from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
+    DigestAuditEvent,
     GmailToken,
     LabelAuditEvent,
     MessageRecord,
@@ -23,6 +24,7 @@ class MailwyrmState:
     messages: dict[str, MessageRecord] = field(default_factory=dict)
     classifications: dict[str, ClassificationRecord] = field(default_factory=dict)
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
+    digest_audit_events: list[DigestAuditEvent] = field(default_factory=list)
     label_audit_events: list[LabelAuditEvent] = field(default_factory=list)
 
     @classmethod
@@ -43,6 +45,10 @@ class MailwyrmState:
             LabelAuditEvent.from_dict(event)
             for event in data.get("label_audit_events", [])
         ]
+        digest_audit_events = [
+            DigestAuditEvent.from_dict(event)
+            for event in data.get("digest_audit_events", [])
+        ]
         return cls(
             account_email=data.get("account_email"),
             history_id=data.get("history_id"),
@@ -50,6 +56,7 @@ class MailwyrmState:
             messages=messages,
             classifications=classifications,
             corrections=corrections,
+            digest_audit_events=digest_audit_events,
             label_audit_events=label_audit_events,
         )
 
@@ -70,6 +77,9 @@ class MailwyrmState:
                 message_id: correction.to_dict()
                 for message_id, correction in sorted(self.corrections.items())
             },
+            "digest_audit_events": [
+                event.to_dict() for event in self.digest_audit_events
+            ],
             "label_audit_events": [
                 event.to_dict() for event in self.label_audit_events
             ],

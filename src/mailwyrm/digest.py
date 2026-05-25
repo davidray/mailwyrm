@@ -6,7 +6,12 @@ from datetime import UTC, datetime
 
 from mailwyrm.store import MailwyrmState
 from mailwyrm.corrections import effective_classification
-from mailwyrm.models import ClassificationRecord, MACHINE_TYPES, MessageRecord
+from mailwyrm.models import (
+    ClassificationRecord,
+    DigestAuditEvent,
+    MACHINE_TYPES,
+    MessageRecord,
+)
 
 
 DIGEST_SECTION_ORDER = (
@@ -55,6 +60,39 @@ def render_digest(state: MailwyrmState, *, title_date: str | None = None) -> str
         lines.append("")
 
     return "\n".join(lines)
+
+
+def mark_digest_items(
+    state: MailwyrmState,
+    *,
+    title_date: str | None = None,
+) -> int:
+    title_date = title_date or datetime.now(UTC).date().isoformat()
+    items = _digest_items(state)
+    existing_message_ids = {
+        event.message_id
+        for event in state.digest_audit_events
+        if event.digest_title_date == title_date
+    }
+    marked = 0
+    for item in items:
+        if item.message.id in existing_message_ids:
+            continue
+        state.digest_audit_events.append(
+            DigestAuditEvent(
+                message_id=item.message.id,
+                digest_title_date=title_date,
+                reason=item.classification.reason,
+                classifier_version=item.classification.classifier_version,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        marked += 1
+    return marked
+
+
+def message_has_been_digested(state: MailwyrmState, message_id: str) -> bool:
+    return any(event.message_id == message_id for event in state.digest_audit_events)
 
 
 def _digest_items(state: MailwyrmState) -> list[DigestItem]:

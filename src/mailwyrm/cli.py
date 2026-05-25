@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from mailwyrm import __version__
@@ -15,7 +16,7 @@ from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
 from mailwyrm.corrections import effective_classification
-from mailwyrm.digest import render_digest
+from mailwyrm.digest import mark_digest_items, render_digest
 from mailwyrm.gmail import GmailClient
 from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
 from mailwyrm.models import (
@@ -370,13 +371,17 @@ def digest_command(output: Path | None) -> int:
         print("No local classifications. Run `mailwyrm classify` first.", file=sys.stderr)
         return 1
 
-    digest = render_digest(state)
+    title_date = datetime.now(UTC).date().isoformat()
+    digest = render_digest(state, title_date=title_date)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(f"{digest}\n", encoding="utf-8")
         print(f"Wrote digest to {output}")
     else:
         print(digest)
+    marked = mark_digest_items(state, title_date=title_date)
+    write_state(state_path(), state)
+    print(f"Marked {marked} message(s) as digested.")
     return 0
 
 
@@ -503,9 +508,14 @@ def actions_apply_archive_command(
 
     print(render_action_preview(plans, mutates_gmail=True))
     client = GmailClient(token)
-    applied = apply_archive_action_plans(client, state, plans)
+    result = apply_archive_action_plans(client, state, plans)
     write_state(state_path(), state)
-    print(f"Archived {applied} message(s) by removing Gmail's INBOX label.")
+    print(f"Archived {result.applied} message(s) by removing Gmail's INBOX label.")
+    if result.skipped_not_digested:
+        print(
+            f"Skipped {result.skipped_not_digested} archive candidate(s) "
+            "because they have not appeared in a digest yet."
+        )
     return 0
 
 

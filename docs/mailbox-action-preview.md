@@ -29,7 +29,7 @@ Mailwyrm can apply only `archive_after_digest` plans:
 uv run mailwyrm actions apply-archive --limit 10 --client-secret /path/to/client_secret.json
 ```
 
-This command prints an action report before mutating Gmail. The report says Gmail will be modified after the preview, then the command archives by removing Gmail's `INBOX` label from messages whose planned action is `archive_after_digest`.
+This command prints an action report before mutating Gmail. The report says Gmail will be modified after the preview, then the command archives by removing Gmail's `INBOX` label from messages whose planned action is `archive_after_digest` and that have already appeared in a local digest.
 
 It does not apply `trash_after_digest`, `protect`, `review`, or `keep` plans. It does not trash messages.
 
@@ -68,5 +68,6 @@ The preview is intentionally conservative:
 - Low-confidence mail is sent to review.
 - Machine mail defaults to `archive_after_digest`.
 - `trash_after_digest` only appears for low-importance machine mail with high automation safety, high confidence, and an explicit `trash` suggested action.
+- Archive apply skips messages that have not yet been recorded in a local digest audit event.
 
 Archive apply and archive restore write local audit events. A later trash command must require explicit user policy, Gmail confirmation, and an audit event before changing Gmail state.

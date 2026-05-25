@@ -9,6 +9,7 @@ from unittest.mock import patch
 from mailwyrm.cli import (
     actions_apply_archive_command,
     actions_restore_archive_command,
+    digest_command,
     ensure_labels_command,
     labels_apply_command,
 )
@@ -96,6 +97,56 @@ class CliTest(unittest.TestCase):
         self.assertIn("msg-1\tMailwyrm/Machine\tHello", stdout.getvalue())
         self.assertIn("Applied Gmail labels to 1 message(s).", stdout.getvalue())
 
+    def test_digest_marks_included_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                state_path = Path(temp_dir) / "state.json"
+                write_state(
+                    state_path,
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="medium",
+                                automation_safety="medium",
+                                confidence=0.82,
+                                reason="Automated sender or subject pattern.",
+                                suggested_actions=["digest"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    with patch("mailwyrm.cli.datetime") as fake_datetime:
+                        fake_datetime.now.return_value.date.return_value.isoformat.return_value = (
+                            "2026-05-25"
+                        )
+                        result = digest_command(None)
+                from mailwyrm.store import read_state
+
+                loaded = read_state(state_path)
+
+        self.assertEqual(result, 0)
+        self.assertIn("Marked 1 message(s) as digested.", stdout.getvalue())
+        self.assertIn("# Mailwyrm Machine Digest - 2026-05-25", stdout.getvalue())
+        self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
+        self.assertEqual(loaded.digest_audit_events[0].digest_title_date, "2026-05-25")
+
     def test_actions_apply_archive_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
@@ -138,7 +189,15 @@ class CliTest(unittest.TestCase):
                 )
 
                 with patch("mailwyrm.cli.GmailClient"):
-                    with patch("mailwyrm.cli.apply_archive_action_plans", return_value=1):
+                    from mailwyrm.actions import ArchiveApplyResult
+
+                    with patch(
+                        "mailwyrm.cli.apply_archive_action_plans",
+                        return_value=ArchiveApplyResult(
+                            applied=1,
+                            skipped_not_digested=2,
+                        ),
+                    ):
                         with patch.object(sys, "stdout", StringIO()) as stdout:
                             result = actions_apply_archive_command(
                                 Path("client_secret.json"),
@@ -153,6 +212,10 @@ class CliTest(unittest.TestCase):
         self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.82\tHello", stdout.getvalue())
         self.assertIn(
             "Archived 1 message(s) by removing Gmail's INBOX label.",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            "Skipped 2 archive candidate(s) because they have not appeared in a digest yet.",
             stdout.getvalue(),
         )
 

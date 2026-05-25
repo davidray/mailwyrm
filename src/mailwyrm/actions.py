@@ -26,6 +26,12 @@ class ActionPlan:
     reason: str
 
 
+@dataclass(frozen=True)
+class ArchiveApplyResult:
+    applied: int = 0
+    skipped_not_digested: int = 0
+
+
 def build_action_plans(
     state: MailwyrmState,
     *,
@@ -156,12 +162,19 @@ def apply_archive_action_plans(
     client: GmailClient,
     state: MailwyrmState,
     plans: list[ActionPlan],
-) -> int:
+) -> ArchiveApplyResult:
     applied = 0
+    skipped_not_digested = 0
+    digested_message_ids = {
+        event.message_id for event in state.digest_audit_events
+    }
     for plan in plans:
         if plan.action != ACTION_ARCHIVE_AFTER_DIGEST:
             continue
         if GMAIL_INBOX_LABEL not in plan.message.label_ids:
+            continue
+        if plan.message.id not in digested_message_ids:
+            skipped_not_digested += 1
             continue
 
         client.remove_labels_from_message(plan.message.id, [GMAIL_INBOX_LABEL])
@@ -185,7 +198,10 @@ def apply_archive_action_plans(
             )
         )
         applied += 1
-    return applied
+    return ArchiveApplyResult(
+        applied=applied,
+        skipped_not_digested=skipped_not_digested,
+    )
 
 
 def restore_archived_message(
