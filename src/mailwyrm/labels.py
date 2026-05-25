@@ -18,6 +18,7 @@ CATEGORY_LABELS = {
     "machine": "Mailwyrm/Machine",
     "needs_review": "Mailwyrm/Needs Review",
 }
+DIGESTED_LABEL = "Mailwyrm/Digested"
 PROTECTED_LABEL = "Mailwyrm/Protected"
 
 
@@ -26,6 +27,14 @@ class LabelPlan:
     message: MessageRecord
     classification: ClassificationRecord
     label_names: list[str]
+
+
+@dataclass(frozen=True)
+class DigestedLabelPlan:
+    message: MessageRecord
+    label_name: str
+    reason: str
+    classifier_version: str
 
 
 def build_label_plans(
@@ -64,6 +73,36 @@ def build_label_plans(
     return plans
 
 
+def build_digested_label_plans(
+    state: MailwyrmState,
+    *,
+    limit: int | None = None,
+) -> list[DigestedLabelPlan]:
+    if limit == 0:
+        return []
+
+    plans: list[DigestedLabelPlan] = []
+    seen_message_ids: set[str] = set()
+    for event in reversed(state.digest_audit_events):
+        if event.message_id in seen_message_ids:
+            continue
+        seen_message_ids.add(event.message_id)
+        message = state.messages.get(event.message_id)
+        if message is None:
+            continue
+        plans.append(
+            DigestedLabelPlan(
+                message=message,
+                label_name=DIGESTED_LABEL,
+                reason=event.reason,
+                classifier_version=event.classifier_version,
+            )
+        )
+        if limit is not None and len(plans) >= limit:
+            break
+    return plans
+
+
 def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
     if mailbox == "all-mail":
         return True
@@ -89,6 +128,16 @@ def render_label_preview(plans: list[LabelPlan]) -> str:
         lines.append(
             f"{plan.message.id}\t{', '.join(plan.label_names)}\t{subject}"
         )
+    return "\n".join(lines)
+
+
+def render_digested_label_preview(plans: list[DigestedLabelPlan]) -> str:
+    if not plans:
+        return "No digested messages are ready for Gmail labels."
+    lines = ["Message ID\tLabels\tSubject"]
+    for plan in plans:
+        subject = plan.message.headers.get("Subject", "(no subject)")
+        lines.append(f"{plan.message.id}\t{plan.label_name}\t{subject}")
     return "\n".join(lines)
 
 
@@ -127,6 +176,41 @@ def apply_label_plans(
                 label_ids=missing_label_ids,
                 reason=plan.classification.reason,
                 classifier_version=plan.classification.classifier_version,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        applied += 1
+    return applied
+
+
+def apply_digested_label_plans(
+    client: GmailClient,
+    state: MailwyrmState,
+    plans: list[DigestedLabelPlan],
+) -> int:
+    if not plans:
+        return 0
+
+    labels_by_name = client.ensure_mailwyrm_labels()
+    digested_label = labels_by_name[DIGESTED_LABEL]
+    applied = 0
+    for plan in plans:
+        if digested_label.id in plan.message.label_ids:
+            continue
+
+        client.add_labels_to_message(plan.message.id, [digested_label.id])
+        state.messages[plan.message.id] = replace(
+            plan.message,
+            label_ids=[*plan.message.label_ids, digested_label.id],
+        )
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=plan.message.id,
+                action="add_digested_label",
+                label_names=[DIGESTED_LABEL],
+                label_ids=[digested_label.id],
+                reason=plan.reason,
+                classifier_version=plan.classifier_version,
                 created_at=datetime.now(UTC).isoformat(),
             )
         )

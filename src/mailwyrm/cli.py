@@ -19,6 +19,11 @@ from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import mark_digest_items, render_digest
 from mailwyrm.gmail import GmailClient
 from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
+from mailwyrm.labels import (
+    apply_digested_label_plans,
+    build_digested_label_plans,
+    render_digested_label_preview,
+)
 from mailwyrm.models import (
     CLASSIFICATION_CATEGORIES,
     GMAIL_MODIFY_SCOPE,
@@ -52,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "classify":
         return classify_command(args.limit)
     if args.command == "digest":
-        return digest_command(args.output)
+        return digest_command(args)
     if args.command == "correct":
         return correct_command(args)
     if args.command == "corrections":
@@ -124,6 +129,40 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help="Optional path to write the Markdown digest. Prints to stdout by default.",
+    )
+    digest_subparsers = digest_parser.add_subparsers(dest="digest_command")
+    digest_labels_parser = digest_subparsers.add_parser(
+        "labels",
+        help="Preview or apply Gmail-visible labels for digested messages.",
+    )
+    digest_labels_subparsers = digest_labels_parser.add_subparsers(
+        dest="digest_labels_command"
+    )
+    digest_labels_preview_parser = digest_labels_subparsers.add_parser(
+        "preview",
+        help="Preview Mailwyrm/Digested labels that would be applied.",
+    )
+    digest_labels_preview_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max digested label plans to preview. Defaults to all digested messages.",
+    )
+    digest_labels_apply_parser = digest_labels_subparsers.add_parser(
+        "apply",
+        help="Apply Mailwyrm/Digested labels to Gmail messages.",
+    )
+    digest_labels_apply_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    digest_labels_apply_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max digested label plans to apply. Defaults to all digested messages.",
     )
 
     correct_parser = subparsers.add_parser(
@@ -362,7 +401,10 @@ def classify_command(limit: int | None) -> int:
     return 0
 
 
-def digest_command(output: Path | None) -> int:
+def digest_command(args: argparse.Namespace) -> int:
+    if args.digest_command == "labels":
+        return digest_labels_command(args)
+
     state = read_state(state_path())
     if not state.messages:
         print("No local messages. Run `mailwyrm sync` first.", file=sys.stderr)
@@ -373,15 +415,62 @@ def digest_command(output: Path | None) -> int:
 
     title_date = datetime.now(UTC).date().isoformat()
     digest = render_digest(state, title_date=title_date)
-    if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(f"{digest}\n", encoding="utf-8")
-        print(f"Wrote digest to {output}")
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(f"{digest}\n", encoding="utf-8")
+        print(f"Wrote digest to {args.output}")
     else:
         print(digest)
     marked = mark_digest_items(state, title_date=title_date)
     write_state(state_path(), state)
     print(f"Marked {marked} message(s) as digested.")
+    return 0
+
+
+def digest_labels_command(args: argparse.Namespace) -> int:
+    if args.digest_labels_command == "preview":
+        state = read_state(state_path())
+        plans = build_digested_label_plans(state, limit=args.limit)
+        print(render_digested_label_preview(plans))
+        return 0
+    if args.digest_labels_command == "apply":
+        return digest_labels_apply_command(args.client_secret, args.limit)
+
+    print("Choose `preview` or `apply`.", file=sys.stderr)
+    return 1
+
+
+def digest_labels_apply_command(client_secret: Path, limit: int | None) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    plans = build_digested_label_plans(state, limit=limit)
+    if not plans:
+        print("No digested messages are ready for Gmail labels.")
+        return 0
+
+    print(render_digested_label_preview(plans))
+    client = GmailClient(token)
+    applied = apply_digested_label_plans(client, state, plans)
+    write_state(state_path(), state)
+    print(f"Applied Mailwyrm/Digested label to {applied} message(s).")
     return 0
 
 
