@@ -24,6 +24,14 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Architecture notes](docs/architecture.md): Gmail-native sync, labels, actions, and data boundaries.
 - [AI behavior](docs/ai-behavior.md): classification, summarization, confidence, and automation principles.
 - [ADR 0001](docs/decisions/0001-gmail-is-source-of-truth.md): decision to keep Gmail as the source of truth.
+- [Gmail read-only sync spike](docs/gmail-readonly-sync.md): first implementation step for OAuth and metadata sync.
+
+## Development
+
+```sh
+uv run mailwyrm --help
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
 
 ## Initial MVP
 
@@ -43,4 +51,3 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - Automation should be confidence-based and reversible where possible.
 - Destructive actions require explicit user trust, narrow policy, and audit logs.
 - The user should always be able to understand why an action happened.
-
