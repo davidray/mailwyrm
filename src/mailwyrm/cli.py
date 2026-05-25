@@ -15,7 +15,7 @@ from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
 from mailwyrm.corrections import effective_classification
-from mailwyrm.digest import render_digest
+from mailwyrm.digest import mark_digest_items, render_digest
 from mailwyrm.gmail import GmailClient
 from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
 from mailwyrm.models import (
@@ -377,6 +377,9 @@ def digest_command(output: Path | None) -> int:
         print(f"Wrote digest to {output}")
     else:
         print(digest)
+    marked = mark_digest_items(state)
+    write_state(state_path(), state)
+    print(f"Marked {marked} message(s) as digested.")
     return 0
 
 

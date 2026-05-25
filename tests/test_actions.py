@@ -13,7 +13,12 @@ from mailwyrm.actions import (
     render_action_preview,
     restore_archived_message,
 )
-from mailwyrm.models import ClassificationCorrection, ClassificationRecord, MessageRecord
+from mailwyrm.models import (
+    ClassificationCorrection,
+    ClassificationRecord,
+    DigestAuditEvent,
+    MessageRecord,
+)
 from mailwyrm.store import MailwyrmState
 
 
@@ -216,6 +221,9 @@ class ActionsTest(unittest.TestCase):
             messages={"msg-1": message("msg-1", label_ids=["INBOX", "Label_1"])},
             classifications={"msg-1": classification("msg-1")},
         )
+        state.digest_audit_events.append(
+            digest_event("msg-1", classifier_version="rules-v0")
+        )
         plans = build_action_plans(state)
         client = FakeGmailClient()
 
@@ -231,11 +239,27 @@ class ActionsTest(unittest.TestCase):
             "Automated sender or subject pattern.",
         )
 
+    def test_apply_archive_action_plans_skips_undigested_messages(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        plans = build_action_plans(state)
+        client = FakeGmailClient()
+
+        applied = apply_archive_action_plans(client, state, plans)
+
+        self.assertEqual(applied, 0)
+        self.assertEqual(client.removed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events, [])
+
     def test_apply_archive_action_plans_skips_non_archive_actions(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1")},
             classifications={"msg-1": classification("msg-1", category="human")},
         )
+        state.digest_audit_events.append(digest_event("msg-1"))
         plans = build_action_plans(state)
         client = FakeGmailClient()
 
@@ -311,6 +335,16 @@ class FakeGmailClient:
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
         self.removed.append((message_id, label_ids))
+
+
+def digest_event(message_id: str, classifier_version: str = "rules-v0"):
+    return DigestAuditEvent(
+        message_id=message_id,
+        digest_title_date="2026-05-25",
+        reason="Automated sender or subject pattern.",
+        classifier_version=classifier_version,
+        created_at="2026-05-25T00:00:00+00:00",
+    )
 
 
 if __name__ == "__main__":

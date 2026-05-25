@@ -173,3 +173,25 @@ class LabelAuditEvent:
             classifier_version=str(data.get("classifier_version", "")),
             created_at=str(data["created_at"]),
         )
+
+
+@dataclass(frozen=True)
+class DigestAuditEvent:
+    message_id: str
+    digest_title_date: str
+    reason: str
+    classifier_version: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DigestAuditEvent":
+        return cls(
+            message_id=str(data["message_id"]),
+            digest_title_date=str(data["digest_title_date"]),
+            reason=str(data.get("reason", "")),
+            classifier_version=str(data.get("classifier_version", "")),
+            created_at=str(data["created_at"]),
+        )

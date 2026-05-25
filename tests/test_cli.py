@@ -9,6 +9,7 @@ from unittest.mock import patch
 from mailwyrm.cli import (
     actions_apply_archive_command,
     actions_restore_archive_command,
+    digest_command,
     ensure_labels_command,
     labels_apply_command,
 )
@@ -95,6 +96,50 @@ class CliTest(unittest.TestCase):
         self.assertIn("Message ID\tLabels\tSubject", stdout.getvalue())
         self.assertIn("msg-1\tMailwyrm/Machine\tHello", stdout.getvalue())
         self.assertIn("Applied Gmail labels to 1 message(s).", stdout.getvalue())
+
+    def test_digest_marks_included_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                state_path = Path(temp_dir) / "state.json"
+                write_state(
+                    state_path,
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="medium",
+                                automation_safety="medium",
+                                confidence=0.82,
+                                reason="Automated sender or subject pattern.",
+                                suggested_actions=["digest"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = digest_command(None)
+                from mailwyrm.store import read_state
+
+                loaded = read_state(state_path)
+
+        self.assertEqual(result, 0)
+        self.assertIn("Marked 1 message(s) as digested.", stdout.getvalue())
+        self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
 
     def test_actions_apply_archive_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

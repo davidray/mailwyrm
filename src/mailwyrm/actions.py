@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from mailwyrm.corrections import effective_classification
+from mailwyrm.digest import message_has_been_digested
 from mailwyrm.gmail import GmailClient
 from mailwyrm.models import ClassificationRecord, LabelAuditEvent, MessageRecord
 from mailwyrm.store import MailwyrmState
@@ -160,6 +161,8 @@ def apply_archive_action_plans(
     applied = 0
     for plan in plans:
         if plan.action != ACTION_ARCHIVE_AFTER_DIGEST:
+            continue
+        if not message_has_been_digested(state, plan.message.id):
             continue
         if GMAIL_INBOX_LABEL not in plan.message.label_ids:
             continue

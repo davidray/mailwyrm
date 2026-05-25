@@ -5,6 +5,7 @@ from pathlib import Path
 from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
+    DigestAuditEvent,
     LabelAuditEvent,
     MessageRecord,
 )
@@ -51,6 +52,15 @@ class StoreTest(unittest.TestCase):
                         reason="Known newsletter.",
                     )
                 },
+                digest_audit_events=[
+                    DigestAuditEvent(
+                        message_id="msg-1",
+                        digest_title_date="2026-05-25",
+                        reason="Known newsletter.",
+                        classifier_version="rules-v0+user-correction",
+                        created_at="2026-05-25T00:00:00+00:00",
+                    )
+                ],
                 label_audit_events=[
                     LabelAuditEvent(
                         message_id="msg-1",
@@ -74,6 +84,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
         self.assertEqual(loaded.classifications["msg-1"].category, "human")
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
+        self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
         self.assertEqual(loaded.label_audit_events[0].label_ids, ["Label_1"])
         self.assertEqual(mode, 0o600)
 
