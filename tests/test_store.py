@@ -18,6 +18,7 @@ class StoreTest(unittest.TestCase):
             state = MailwyrmState(
                 account_email="user@example.com",
                 history_id="123",
+                last_sync_mailbox="all-mail",
                 messages={
                     "msg-1": MessageRecord(
                         id="msg-1",
@@ -69,6 +70,7 @@ class StoreTest(unittest.TestCase):
 
         self.assertEqual(loaded.account_email, "user@example.com")
         self.assertEqual(loaded.history_id, "123")
+        self.assertEqual(loaded.last_sync_mailbox, "all-mail")
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
         self.assertEqual(loaded.classifications["msg-1"].category, "human")
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")

@@ -34,7 +34,7 @@ class GmailClient:
         self,
         *,
         max_results: int = 25,
-        label_ids: tuple[str, ...] = ("INBOX",),
+        label_ids: tuple[str, ...] | None = ("INBOX",),
     ) -> list[dict[str, Any]]:
         query: dict[str, str | int] = {"maxResults": max_results}
         url = f"{GMAIL_API_BASE}/users/me/messages?{urllib.parse.urlencode(query)}"

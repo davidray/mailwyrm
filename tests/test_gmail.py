@@ -67,6 +67,47 @@ class GmailClientTest(unittest.TestCase):
         self.assertEqual(calls[0][1]["addLabelIds"], ["Label_1"])
         self.assertEqual(calls[0][1]["removeLabelIds"], [])
 
+    def test_list_messages_omits_label_filter_when_label_ids_is_none(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            return {"messages": []}
+
+        client._request = fake_request
+
+        client.list_messages(max_results=10, label_ids=None)
+
+        self.assertIn("maxResults=10", urls[0])
+        self.assertNotIn("labelIds=", urls[0])
+
+    def test_list_messages_includes_inbox_label_by_default(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            return {"messages": []}
+
+        client._request = fake_request
+
+        client.list_messages(max_results=10)
+
+        self.assertIn("labelIds=INBOX", urls[0])
+
 
 if __name__ == "__main__":
     unittest.main()
