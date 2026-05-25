@@ -25,5 +25,6 @@ uv run mailwyrm sync --mailbox all-mail --limit 500 --client-secret /path/to/cli
 
 The default is `inbox`.
 
-All-mail sync still only updates Mailwyrm's local index. It does not archive, trash, label, mark read, or otherwise mutate Gmail.
+When a fetched Gmail message already exists in the local index, Mailwyrm replaces the local message metadata with the latest Gmail record. That includes Gmail label IDs, so labels added or removed in Gmail are refreshed locally on the next sync that includes the message.
 
+All-mail sync still only updates Mailwyrm's local index. It does not archive, trash, label, mark read, or otherwise mutate Gmail.
