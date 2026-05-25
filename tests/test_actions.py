@@ -6,6 +6,7 @@ from mailwyrm.actions import (
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_TRASH_AFTER_DIGEST,
+    apply_archive_action_plans,
     build_action_plans,
     plan_action,
     render_action_preview,
@@ -162,6 +163,14 @@ class ActionsTest(unittest.TestCase):
 
         self.assertEqual(plans[0].action, ACTION_ARCHIVE_AFTER_DIGEST)
 
+    def test_build_action_plans_respects_zero_limit(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+
+        self.assertEqual(build_action_plans(state, limit=0), [])
+
     def test_render_action_preview_includes_counts_and_report(self) -> None:
         plans = [
             plan_action(message("msg-1", subject="Receipt"), classification("msg-1")),
@@ -179,6 +188,16 @@ class ActionsTest(unittest.TestCase):
         self.assertIn("Message ID\tAction\tCategory\tConfidence\tSubject\tReason", preview)
         self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.86\tReceipt", preview)
 
+    def test_render_action_preview_can_show_mutation_notice(self) -> None:
+        plans = [
+            plan_action(message("msg-1", subject="Receipt"), classification("msg-1")),
+        ]
+
+        preview = render_action_preview(plans, mutates_gmail=True)
+
+        self.assertIn("Gmail will be modified after this preview.", preview)
+        self.assertNotIn("No Gmail actions will be performed.", preview)
+
     def test_render_action_preview_normalizes_table_fields(self) -> None:
         plan = plan_action(
             message("msg-1", subject="Receipt\twith\nfolded whitespace"),
@@ -189,6 +208,64 @@ class ActionsTest(unittest.TestCase):
 
         self.assertIn("Receipt with folded whitespace", preview)
         self.assertNotIn("Receipt\twith\nfolded whitespace", preview)
+
+    def test_apply_archive_action_plans_removes_inbox_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["INBOX", "Label_1"])},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        plans = build_action_plans(state)
+        client = FakeGmailClient()
+
+        applied = apply_archive_action_plans(client, state, plans)
+
+        self.assertEqual(applied, 1)
+        self.assertEqual(client.removed, [("msg-1", ["INBOX"])])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_ARCHIVE_AFTER_DIGEST)
+        self.assertEqual(state.label_audit_events[0].label_ids, ["INBOX"])
+        self.assertEqual(
+            state.label_audit_events[0].reason,
+            "Automated sender or subject pattern.",
+        )
+
+    def test_apply_archive_action_plans_skips_non_archive_actions(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={"msg-1": classification("msg-1", category="human")},
+        )
+        plans = build_action_plans(state)
+        client = FakeGmailClient()
+
+        applied = apply_archive_action_plans(client, state, plans)
+
+        self.assertEqual(applied, 0)
+        self.assertEqual(client.removed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_apply_archive_action_plans_skips_already_archived_messages(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=[])},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        plans = build_action_plans(state, mailbox="all-mail")
+        client = FakeGmailClient()
+
+        applied = apply_archive_action_plans(client, state, plans)
+
+        self.assertEqual(applied, 0)
+        self.assertEqual(client.removed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, [])
+        self.assertEqual(state.label_audit_events, [])
+
+
+class FakeGmailClient:
+    def __init__(self) -> None:
+        self.removed: list[tuple[str, list[str]]] = []
+
+    def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.removed.append((message_id, label_ids))
 
 
 if __name__ == "__main__":

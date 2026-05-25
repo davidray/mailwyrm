@@ -97,6 +97,15 @@ class GmailClient:
             },
         )
 
+    def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self._post(
+            f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
+            {
+                "addLabelIds": [],
+                "removeLabelIds": label_ids,
+            },
+        )
+
     def _get(self, path: str) -> dict[str, Any]:
         return self._request(f"{GMAIL_API_BASE}{path}")
 
