@@ -4,17 +4,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from mailwyrm.models import ClassificationRecord, MessageRecord
 from mailwyrm.store import MailwyrmState
 from mailwyrm.corrections import effective_classification
+from mailwyrm.models import ClassificationRecord, MACHINE_TYPES, MessageRecord
 
 
 DIGEST_SECTION_ORDER = (
-    "transactional",
-    "delivery",
-    "newsletter",
-    "security",
-    "notification",
+    *MACHINE_TYPES,
     "needs_review",
 )
 

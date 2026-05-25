@@ -11,7 +11,7 @@ from mailwyrm.corrections import CorrectionError, add_correction, correction_rep
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import render_digest
 from mailwyrm.gmail import GmailClient
-from mailwyrm.models import MessageRecord
+from mailwyrm.models import CLASSIFICATION_CATEGORIES, MACHINE_TYPES, MessageRecord
 from mailwyrm.oauth import add_auth_arguments, authorize, refresh_token, token_is_expired
 from mailwyrm.store import read_state, read_token, write_state, write_token
 
@@ -87,11 +87,12 @@ def build_parser() -> argparse.ArgumentParser:
     correct_parser.add_argument("message_id", help="Gmail message ID from `mailwyrm list`.")
     correct_parser.add_argument(
         "category",
-        choices=("human", "machine", "needs_review"),
+        choices=CLASSIFICATION_CATEGORIES,
         help="Corrected classification category.",
     )
     correct_parser.add_argument(
         "--machine-type",
+        choices=MACHINE_TYPES,
         help="Optional machine subtype when category is machine.",
     )
     correct_parser.add_argument(

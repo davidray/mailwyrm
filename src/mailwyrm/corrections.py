@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from mailwyrm.models import ClassificationCorrection, ClassificationRecord
+from mailwyrm.models import (
+    CLASSIFICATION_CATEGORIES,
+    MACHINE_TYPES,
+    ClassificationCorrection,
+    ClassificationRecord,
+)
 from mailwyrm.store import MailwyrmState
-
-
-VALID_CATEGORIES = {"human", "machine", "needs_review"}
 
 
 class CorrectionError(ValueError):
@@ -23,12 +25,18 @@ def add_correction(
 ) -> ClassificationCorrection:
     if message_id not in state.messages:
         raise CorrectionError(f"message {message_id} is not in the local index")
-    if category not in VALID_CATEGORIES:
+    if category not in CLASSIFICATION_CATEGORIES:
         raise CorrectionError(
-            f"category must be one of: {', '.join(sorted(VALID_CATEGORIES))}"
+            f"category must be one of: {', '.join(CLASSIFICATION_CATEGORIES)}"
         )
     if category != "machine" and machine_type is not None:
         raise CorrectionError("machine_type can only be set for machine corrections")
+    if category == "machine" and machine_type is None:
+        machine_type = "notification"
+    if category == "machine" and machine_type not in MACHINE_TYPES:
+        raise CorrectionError(
+            f"machine_type must be one of: {', '.join(MACHINE_TYPES)}"
+        )
 
     correction = ClassificationCorrection(
         message_id=message_id,
@@ -66,7 +74,11 @@ def correction_report(state: MailwyrmState) -> str:
         original = state.classifications.get(message_id)
         if original and original.category != correction.category:
             changed += 1
-        subject = state.messages[message_id].headers.get("Subject", "(no subject)")
+        message = state.messages.get(message_id)
+        subject = "(missing message)" if message is None else message.headers.get(
+            "Subject",
+            "(no subject)",
+        )
         lines.append(f"- {message_id}\t{correction.category}\t{subject}")
 
     lines.insert(1, f"Category changes: {changed}")

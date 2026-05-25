@@ -12,6 +12,15 @@ ClassificationCategory = str
 Importance = str
 AutomationSafety = str
 
+CLASSIFICATION_CATEGORIES = ("human", "machine", "needs_review")
+MACHINE_TYPES = (
+    "transactional",
+    "delivery",
+    "newsletter",
+    "security",
+    "notification",
+)
+
 
 @dataclass(frozen=True)
 class GmailToken:

@@ -6,7 +6,7 @@ from mailwyrm.corrections import (
     correction_report,
     effective_classification,
 )
-from mailwyrm.models import ClassificationRecord, MessageRecord
+from mailwyrm.models import ClassificationCorrection, ClassificationRecord, MessageRecord
 from mailwyrm.store import MailwyrmState
 
 
@@ -33,6 +33,15 @@ def classification(message_id: str = "msg-1") -> ClassificationRecord:
         reason="No strong human or machine signal.",
         suggested_actions=["review"],
         classifier_version="rules-v0",
+    )
+
+
+def missing_correction() -> ClassificationCorrection:
+    return ClassificationCorrection(
+        message_id="missing",
+        category="human",
+        machine_type=None,
+        reason="Legacy correction.",
     )
 
 
@@ -68,6 +77,24 @@ class CorrectionsTest(unittest.TestCase):
                 machine_type="newsletter",
             )
 
+    def test_rejects_unknown_machine_type(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1")})
+
+        with self.assertRaises(CorrectionError):
+            add_correction(
+                state,
+                message_id="msg-1",
+                category="machine",
+                machine_type="made_up",
+            )
+
+    def test_defaults_machine_type_for_machine_correction(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1")})
+
+        correction = add_correction(state, message_id="msg-1", category="machine")
+
+        self.assertEqual(correction.machine_type, "notification")
+
     def test_effective_classification_preserves_original_with_user_overlay(self) -> None:
         state = MailwyrmState(messages={"msg-1": message("msg-1")})
         correction = add_correction(
@@ -98,6 +125,15 @@ class CorrectionsTest(unittest.TestCase):
         self.assertIn("Corrections: 1", report)
         self.assertIn("Category changes: 1", report)
         self.assertIn("Weekly update", report)
+
+    def test_correction_report_handles_missing_messages(self) -> None:
+        state = MailwyrmState()
+        state.corrections["missing"] = missing_correction()
+
+        report = correction_report(state)
+
+        self.assertIn("Corrections: 1", report)
+        self.assertIn("(missing message)", report)
 
 
 if __name__ == "__main__":
