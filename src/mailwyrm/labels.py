@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from mailwyrm.corrections import effective_classification
@@ -84,24 +84,33 @@ def apply_label_plans(
     state: MailwyrmState,
     plans: list[LabelPlan],
 ) -> int:
+    if not plans:
+        return 0
+
     labels_by_name = client.ensure_mailwyrm_labels()
     applied = 0
     for plan in plans:
-        label_ids = _label_ids_for_plan(plan, labels_by_name)
         message_label_ids = set(plan.message.label_ids)
-        missing_label_ids = [
-            label_id for label_id in label_ids if label_id not in message_label_ids
+        missing_labels = [
+            (label_name, labels_by_name[label_name].id)
+            for label_name in plan.label_names
+            if labels_by_name[label_name].id not in message_label_ids
         ]
-        if not missing_label_ids:
+        if not missing_labels:
             continue
 
+        missing_label_names = [label_name for label_name, _label_id in missing_labels]
+        missing_label_ids = [label_id for _label_name, label_id in missing_labels]
         client.add_labels_to_message(plan.message.id, missing_label_ids)
-        plan.message.label_ids.extend(missing_label_ids)
+        state.messages[plan.message.id] = replace(
+            plan.message,
+            label_ids=[*plan.message.label_ids, *missing_label_ids],
+        )
         state.label_audit_events.append(
             LabelAuditEvent(
                 message_id=plan.message.id,
                 action="add_labels",
-                label_names=plan.label_names,
+                label_names=missing_label_names,
                 label_ids=missing_label_ids,
                 reason=plan.classification.reason,
                 classifier_version=plan.classification.classifier_version,
@@ -110,13 +119,6 @@ def apply_label_plans(
         )
         applied += 1
     return applied
-
-
-def _label_ids_for_plan(
-    plan: LabelPlan,
-    labels_by_name: dict[str, GmailLabel],
-) -> list[str]:
-    return [labels_by_name[label_name].id for label_name in plan.label_names]
 
 
 def _is_protected(classification: ClassificationRecord) -> bool:

@@ -46,8 +46,10 @@ def classification(
 class FakeGmailClient:
     def __init__(self) -> None:
         self.applied: list[tuple[str, list[str]]] = []
+        self.ensured = 0
 
     def ensure_mailwyrm_labels(self):
+        self.ensured += 1
         return {
             "Mailwyrm/Human": GmailLabel(id="label-human", name="Mailwyrm/Human"),
             "Mailwyrm/Machine": GmailLabel(id="label-machine", name="Mailwyrm/Machine"),
@@ -127,6 +129,7 @@ class LabelsTest(unittest.TestCase):
             messages={"msg-1": message("msg-1")},
             classifications={"msg-1": classification("msg-1")},
         )
+        original_message = state.messages["msg-1"]
         client = FakeGmailClient()
 
         applied = apply_label_plans(client, state, build_label_plans(state))
@@ -134,6 +137,7 @@ class LabelsTest(unittest.TestCase):
         self.assertEqual(applied, 1)
         self.assertEqual(client.applied, [("msg-1", ["label-machine"])])
         self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX", "label-machine"])
+        self.assertIsNot(state.messages["msg-1"], original_message)
         self.assertEqual(state.label_audit_events[0].label_names, ["Mailwyrm/Machine"])
 
     def test_apply_label_plans_skips_already_labeled_messages(self) -> None:
@@ -150,6 +154,41 @@ class LabelsTest(unittest.TestCase):
         self.assertEqual(applied, 0)
         self.assertEqual(client.applied, [])
         self.assertEqual(state.label_audit_events, [])
+
+    def test_apply_label_plans_returns_early_when_empty(self) -> None:
+        state = MailwyrmState()
+        client = FakeGmailClient()
+
+        applied = apply_label_plans(client, state, [])
+
+        self.assertEqual(applied, 0)
+        self.assertEqual(client.ensured, 0)
+
+    def test_apply_label_plans_audits_only_missing_labels(self) -> None:
+        msg = message("msg-1")
+        msg.label_ids.append("label-review")
+        state = MailwyrmState(
+            messages={"msg-1": msg},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="needs_review",
+                    importance="high",
+                    automation_safety="low",
+                )
+            },
+        )
+        client = FakeGmailClient()
+
+        applied = apply_label_plans(client, state, build_label_plans(state))
+
+        self.assertEqual(applied, 1)
+        self.assertEqual(client.applied, [("msg-1", ["label-protected"])])
+        self.assertEqual(
+            state.label_audit_events[0].label_names,
+            ["Mailwyrm/Protected"],
+        )
+        self.assertEqual(state.label_audit_events[0].label_ids, ["label-protected"])
 
 
 if __name__ == "__main__":

@@ -61,9 +61,9 @@ class GmailClientTest(unittest.TestCase):
 
         client._post = fake_post
 
-        client.add_labels_to_message("msg 1", ["Label_1"])
+        client.add_labels_to_message("msg 1/part", ["Label_1"])
 
-        self.assertEqual(calls[0][0], "/users/me/messages/msg%201/modify")
+        self.assertEqual(calls[0][0], "/users/me/messages/msg%201%2Fpart/modify")
         self.assertEqual(calls[0][1]["addLabelIds"], ["Label_1"])
         self.assertEqual(calls[0][1]["removeLabelIds"], [])
 
