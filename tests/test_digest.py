@@ -90,6 +90,44 @@ class DigestTest(unittest.TestCase):
         self.assertIn("## Needs Review", digest)
         self.assertIn("Security alert", digest)
 
+    def test_digest_escapes_markdown_from_email_content(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-msg-1",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Click ](https://bad.example) *now*",
+                    headers={
+                        "From": "Sender ](https://bad.example)",
+                        "Subject": "Receipt ](https://bad.example)",
+                    },
+                )
+            },
+            classifications={
+                "msg-1": ClassificationRecord(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="transactional",
+                    importance="medium",
+                    automation_safety="medium",
+                    confidence=0.82,
+                    reason="Reason ](https://bad.example)",
+                    suggested_actions=["digest"],
+                    classifier_version="rules-v0",
+                )
+            },
+        )
+
+        digest = render_digest(state, title_date="2026-05-25")
+
+        self.assertIn("Receipt \\]\\(https://bad.example\\)", digest)
+        self.assertIn("Sender \\]\\(https://bad.example\\)", digest)
+        self.assertIn("Reason \\]\\(https://bad.example\\)", digest)
+        self.assertIn("Click \\]\\(https://bad.example\\) \\*now\\*", digest)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,7 +38,7 @@ def render_digest(state: MailwyrmState, *, title_date: str | None = None) -> str
     if not items:
         lines.extend(
             [
-                "No machine or protected review items are ready for the digest.",
+                "No machine or high-importance review items are ready for the digest.",
                 "",
             ]
         )
@@ -98,10 +98,11 @@ def _section_title(section: str) -> str:
 def _render_item(item: DigestItem) -> list[str]:
     message = item.message
     classification = item.classification
-    sender = message.headers.get("From", "(unknown sender)")
-    subject = message.headers.get("Subject", "(no subject)")
+    sender = _escape_markdown(_single_line(message.headers.get("From", "(unknown sender)")))
+    subject = _escape_markdown(_single_line(message.headers.get("Subject", "(no subject)")))
     gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{message.id}"
-    snippet = _clean_snippet(message.snippet)
+    snippet = _escape_markdown(_clean_snippet(message.snippet))
+    reason = _escape_markdown(_single_line(classification.reason))
 
     lines = [
         f"- [{subject}]({gmail_url})",
@@ -112,7 +113,7 @@ def _render_item(item: DigestItem) -> list[str]:
             f"automation safety: {classification.automation_safety}; "
             f"confidence: {classification.confidence:.2f}"
         ),
-        f"  Reason: {classification.reason}",
+        f"  Reason: {reason}",
     ]
     if snippet:
         lines.append(f"  Snippet: {snippet}")
@@ -120,7 +121,29 @@ def _render_item(item: DigestItem) -> list[str]:
 
 
 def _clean_snippet(snippet: str) -> str:
-    normalized = " ".join(snippet.split())
+    normalized = _single_line(snippet)
     if len(normalized) <= 220:
         return normalized
     return f"{normalized[:217]}..."
+
+
+def _single_line(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _escape_markdown(text: str) -> str:
+    replacements = {
+        "\\": "\\\\",
+        "[": "\\[",
+        "]": "\\]",
+        "(": "\\(",
+        ")": "\\)",
+        "*": "\\*",
+        "_": "\\_",
+        "`": "\\`",
+        "#": "\\#",
+        "|": "\\|",
+        "<": "\\<",
+        ">": "\\>",
+    }
+    return "".join(replacements.get(character, character) for character in text)
