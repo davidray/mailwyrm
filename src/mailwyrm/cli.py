@@ -5,7 +5,11 @@ import sys
 from pathlib import Path
 
 from mailwyrm import __version__
-from mailwyrm.actions import build_action_plans, render_action_preview
+from mailwyrm.actions import (
+    apply_archive_action_plans,
+    build_action_plans,
+    render_action_preview,
+)
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
@@ -222,6 +226,28 @@ def build_parser() -> argparse.ArgumentParser:
         default="inbox",
         help="Mailbox scope to preview. Defaults to inbox.",
     )
+    actions_apply_archive_parser = actions_subparsers.add_parser(
+        "apply-archive",
+        help="Apply archive_after_digest plans by removing Gmail's INBOX label.",
+    )
+    actions_apply_archive_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    actions_apply_archive_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max action plans to consider. Defaults to all classified messages.",
+    )
+    actions_apply_archive_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to apply. Defaults to inbox.",
+    )
 
     return parser
 
@@ -417,9 +443,53 @@ def actions_command(args: argparse.Namespace) -> int:
         plans = build_action_plans(state, limit=args.limit, mailbox=args.mailbox)
         print(render_action_preview(plans))
         return 0
+    if args.actions_command == "apply-archive":
+        return actions_apply_archive_command(
+            args.client_secret,
+            args.limit,
+            args.mailbox,
+        )
 
-    print("Choose `preview`.", file=sys.stderr)
+    print("Choose `preview` or `apply-archive`.", file=sys.stderr)
     return 1
+
+
+def actions_apply_archive_command(
+    client_secret: Path,
+    limit: int | None,
+    mailbox: str,
+) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    plans = build_action_plans(state, limit=limit, mailbox=mailbox)
+    if not plans:
+        print("No classified messages are ready for mailbox actions.")
+        return 0
+
+    print(render_action_preview(plans))
+    client = GmailClient(token)
+    applied = apply_archive_action_plans(client, state, plans)
+    write_state(state_path(), state)
+    print(f"Archived {applied} message(s) by removing Gmail's INBOX label.")
+    return 0
 
 
 def list_command(limit: int, show_classification: bool) -> int:

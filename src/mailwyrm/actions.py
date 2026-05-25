@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 
 from mailwyrm.corrections import effective_classification
-from mailwyrm.models import ClassificationRecord, MessageRecord
+from mailwyrm.gmail import GmailClient
+from mailwyrm.models import ClassificationRecord, LabelAuditEvent, MessageRecord
 from mailwyrm.store import MailwyrmState
 
 
@@ -12,6 +14,7 @@ ACTION_REVIEW = "review"
 ACTION_PROTECT = "protect"
 ACTION_ARCHIVE_AFTER_DIGEST = "archive_after_digest"
 ACTION_TRASH_AFTER_DIGEST = "trash_after_digest"
+GMAIL_INBOX_LABEL = "INBOX"
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,9 @@ def build_action_plans(
     limit: int | None = None,
     mailbox: str = "inbox",
 ) -> list[ActionPlan]:
+    if limit == 0:
+        return []
+
     plans: list[ActionPlan] = []
     messages = sorted(
         state.messages.values(),
@@ -144,6 +150,42 @@ def render_action_preview(plans: list[ActionPlan]) -> str:
             )
         )
     return "\n".join(lines)
+
+
+def apply_archive_action_plans(
+    client: GmailClient,
+    state: MailwyrmState,
+    plans: list[ActionPlan],
+) -> int:
+    applied = 0
+    for plan in plans:
+        if plan.action != ACTION_ARCHIVE_AFTER_DIGEST:
+            continue
+        if GMAIL_INBOX_LABEL not in plan.message.label_ids:
+            continue
+
+        client.remove_labels_from_message(plan.message.id, [GMAIL_INBOX_LABEL])
+        state.messages[plan.message.id] = replace(
+            plan.message,
+            label_ids=[
+                label_id
+                for label_id in plan.message.label_ids
+                if label_id != GMAIL_INBOX_LABEL
+            ],
+        )
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=plan.message.id,
+                action=ACTION_ARCHIVE_AFTER_DIGEST,
+                label_names=[GMAIL_INBOX_LABEL],
+                label_ids=[GMAIL_INBOX_LABEL],
+                reason=plan.reason,
+                classifier_version=plan.classification.classifier_version,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        applied += 1
+    return applied
 
 
 def _can_trash_after_digest(classification: ClassificationRecord) -> bool:
