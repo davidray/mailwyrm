@@ -31,6 +31,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Gmail label setup](docs/gmail-label-setup.md): explicit setup for Gmail-visible Mailwyrm labels.
 - [Gmail label application](docs/gmail-label-application.md): preview and explicitly apply Gmail labels from local classifications.
 - [Sync mailbox selection](docs/sync-mailbox-selection.md): choose inbox or all-mail sync scope.
+- [Mailbox action preview](docs/mailbox-action-preview.md): preview archive, keep, protect, review, or trash-after-digest plans without mutating Gmail.
 
 ## Development
 
