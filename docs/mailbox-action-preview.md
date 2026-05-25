@@ -70,4 +70,4 @@ The preview is intentionally conservative:
 - `trash_after_digest` only appears for low-importance machine mail with high automation safety, high confidence, and an explicit `trash` suggested action.
 - Archive apply skips messages that have not yet been recorded in a local digest audit event.
 
-Archive apply and archive restore write local audit events. A later trash command must require explicit user policy, Gmail confirmation, and an audit event before changing Gmail state.
+Archive apply and archive restore write local audit events. A later trash command must require explicit local policy opt-in, Gmail confirmation, and an audit event before changing Gmail state. Use `mailwyrm policy status` to inspect the current policy boundary.

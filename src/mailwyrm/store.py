@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from mailwyrm.models import (
+    AutomationPolicy,
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
@@ -26,6 +27,7 @@ class MailwyrmState:
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
     digest_audit_events: list[DigestAuditEvent] = field(default_factory=list)
     label_audit_events: list[LabelAuditEvent] = field(default_factory=list)
+    automation_policy: AutomationPolicy = field(default_factory=AutomationPolicy)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MailwyrmState":
@@ -49,6 +51,9 @@ class MailwyrmState:
             DigestAuditEvent.from_dict(event)
             for event in data.get("digest_audit_events", [])
         ]
+        automation_policy = AutomationPolicy.from_dict(
+            data.get("automation_policy", {})
+        )
         return cls(
             account_email=data.get("account_email"),
             history_id=data.get("history_id"),
@@ -58,6 +63,7 @@ class MailwyrmState:
             corrections=corrections,
             digest_audit_events=digest_audit_events,
             label_audit_events=label_audit_events,
+            automation_policy=automation_policy,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -83,6 +89,7 @@ class MailwyrmState:
             "label_audit_events": [
                 event.to_dict() for event in self.label_audit_events
             ],
+            "automation_policy": self.automation_policy.to_dict(),
         }
 
 

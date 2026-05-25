@@ -39,6 +39,7 @@ from mailwyrm.oauth import (
     scope_for_name,
     token_is_expired,
 )
+from mailwyrm.policy import render_policy_status
 from mailwyrm.store import read_state, read_token, write_state, write_token
 from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
 
@@ -66,6 +67,8 @@ def main(argv: list[str] | None = None) -> int:
         return correct_command(args)
     if args.command == "corrections":
         return corrections_command()
+    if args.command == "policy":
+        return policy_command(args)
     if args.command == "list":
         return list_command(args.limit, args.show_classification)
     if args.command == "labels":
@@ -253,6 +256,16 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "corrections",
         help="List local classification corrections.",
+    )
+
+    policy_parser = subparsers.add_parser(
+        "policy",
+        help="Show local automation policy.",
+    )
+    policy_subparsers = policy_parser.add_subparsers(dest="policy_command")
+    policy_subparsers.add_parser(
+        "status",
+        help="Show local automation policy without mutating Gmail or local state.",
     )
 
     list_parser = subparsers.add_parser(
@@ -665,6 +678,16 @@ def corrections_command() -> int:
     state = read_state(state_path())
     print(correction_report(state))
     return 0
+
+
+def policy_command(args: argparse.Namespace) -> int:
+    if args.policy_command == "status":
+        state = read_state(state_path())
+        print(render_policy_status(state.automation_policy))
+        return 0
+
+    print("Choose `status`.", file=sys.stderr)
+    return 1
 
 
 def labels_command(args: argparse.Namespace) -> int:

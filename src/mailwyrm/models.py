@@ -195,3 +195,35 @@ class DigestAuditEvent:
             classifier_version=str(data.get("classifier_version", "")),
             created_at=str(data["created_at"]),
         )
+
+
+@dataclass(frozen=True)
+class AutomationPolicy:
+    archive_after_digest_enabled: bool = True
+    trash_after_digest_enabled: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AutomationPolicy":
+        return cls(
+            archive_after_digest_enabled=_policy_bool(
+                data.get("archive_after_digest_enabled"),
+                default=True,
+            ),
+            trash_after_digest_enabled=_policy_bool(
+                data.get("trash_after_digest_enabled"),
+                default=False,
+            ),
+        )
+
+
+def _policy_bool(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)

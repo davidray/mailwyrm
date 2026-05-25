@@ -17,6 +17,7 @@ from mailwyrm.cli import (
     digest_labels_apply_command,
     ensure_labels_command,
     labels_apply_command,
+    policy_command,
 )
 from mailwyrm.models import (
     GMAIL_MODIFY_SCOPE,
@@ -47,6 +48,19 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(result, 1)
         self.assertIn("gmail.modify", stderr.getvalue())
+
+    def test_policy_status_prints_local_policy_without_token(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_state(Path(temp_dir) / "state.json", MailwyrmState())
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = policy_command(Namespace(policy_command="status"))
+
+        self.assertEqual(result, 0)
+        self.assertIn("# Mailwyrm Policy Status", stdout.getvalue())
+        self.assertIn("Archive after digest: enabled", stdout.getvalue())
+        self.assertIn("Trash after digest: disabled", stdout.getvalue())
 
     def test_labels_apply_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from mailwyrm.models import (
+    AutomationPolicy,
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
@@ -72,6 +73,10 @@ class StoreTest(unittest.TestCase):
                         created_at="2026-05-25T00:00:00+00:00",
                     )
                 ],
+                automation_policy=AutomationPolicy(
+                    archive_after_digest_enabled=True,
+                    trash_after_digest_enabled=True,
+                ),
             )
 
             write_state(path, state)
@@ -86,7 +91,15 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
         self.assertEqual(loaded.label_audit_events[0].label_ids, ["Label_1"])
+        self.assertTrue(loaded.automation_policy.archive_after_digest_enabled)
+        self.assertTrue(loaded.automation_policy.trash_after_digest_enabled)
         self.assertEqual(mode, 0o600)
+
+    def test_state_defaults_to_conservative_automation_policy(self) -> None:
+        state = MailwyrmState.from_dict({})
+
+        self.assertTrue(state.automation_policy.archive_after_digest_enabled)
+        self.assertFalse(state.automation_policy.trash_after_digest_enabled)
 
 
 if __name__ == "__main__":
