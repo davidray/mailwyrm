@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from mailwyrm import __version__
+from mailwyrm.actions import build_action_plans, render_action_preview
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
@@ -54,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         return list_command(args.limit, args.show_classification)
     if args.command == "labels":
         return labels_command(args)
+    if args.command == "actions":
+        return actions_command(args)
 
     parser.print_help()
     return 1
@@ -196,6 +199,28 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SYNC_MAILBOXES,
         default="inbox",
         help="Mailbox scope to label. Defaults to inbox.",
+    )
+
+    actions_parser = subparsers.add_parser(
+        "actions",
+        help="Preview mailbox actions from local classifications.",
+    )
+    actions_subparsers = actions_parser.add_subparsers(dest="actions_command")
+    actions_preview_parser = actions_subparsers.add_parser(
+        "preview",
+        help="Preview mailbox actions without mutating Gmail.",
+    )
+    actions_preview_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max action plans to preview. Defaults to all classified messages.",
+    )
+    actions_preview_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to preview. Defaults to inbox.",
     )
 
     return parser
@@ -384,6 +409,17 @@ def labels_apply_command(client_secret: Path, limit: int | None, mailbox: str) -
     write_state(state_path(), state)
     print(f"Applied Gmail labels to {applied} message(s).")
     return 0
+
+
+def actions_command(args: argparse.Namespace) -> int:
+    if args.actions_command == "preview":
+        state = read_state(state_path())
+        plans = build_action_plans(state, limit=args.limit, mailbox=args.mailbox)
+        print(render_action_preview(plans))
+        return 0
+
+    print("Choose `preview`.", file=sys.stderr)
+    return 1
 
 
 def list_command(limit: int, show_classification: bool) -> int:
