@@ -9,6 +9,7 @@ from mailwyrm.actions import (
     apply_archive_action_plans,
     build_action_plans,
     render_action_preview,
+    restore_archived_message,
 )
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
@@ -248,6 +249,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="inbox",
         help="Mailbox scope to apply. Defaults to inbox.",
     )
+    actions_restore_archive_parser = actions_subparsers.add_parser(
+        "restore-archive",
+        help="Restore an archived message by adding Gmail's INBOX label.",
+    )
+    actions_restore_archive_parser.add_argument(
+        "message_id",
+        help="Gmail message ID to restore to the inbox.",
+    )
+    actions_restore_archive_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
 
     return parser
 
@@ -449,8 +464,10 @@ def actions_command(args: argparse.Namespace) -> int:
             args.limit,
             args.mailbox,
         )
+    if args.actions_command == "restore-archive":
+        return actions_restore_archive_command(args.client_secret, args.message_id)
 
-    print("Choose `preview` or `apply-archive`.", file=sys.stderr)
+    print("Choose `preview`, `apply-archive`, or `restore-archive`.", file=sys.stderr)
     return 1
 
 
@@ -489,6 +506,42 @@ def actions_apply_archive_command(
     applied = apply_archive_action_plans(client, state, plans)
     write_state(state_path(), state)
     print(f"Archived {applied} message(s) by removing Gmail's INBOX label.")
+    return 0
+
+
+def actions_restore_archive_command(client_secret: Path, message_id: str) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    client = GmailClient(token)
+    try:
+        restored = restore_archived_message(client, state, message_id)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    write_state(state_path(), state)
+    if restored:
+        print(f"Restored {message_id} to inbox by adding Gmail's INBOX label.")
+    else:
+        print(f"Message {message_id} is already in the inbox.")
     return 0
 
 

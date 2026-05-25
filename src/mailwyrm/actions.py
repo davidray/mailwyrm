@@ -13,6 +13,7 @@ ACTION_KEEP = "keep"
 ACTION_REVIEW = "review"
 ACTION_PROTECT = "protect"
 ACTION_ARCHIVE_AFTER_DIGEST = "archive_after_digest"
+ACTION_RESTORE_ARCHIVE = "restore_archive"
 ACTION_TRASH_AFTER_DIGEST = "trash_after_digest"
 GMAIL_INBOX_LABEL = "INBOX"
 
@@ -185,6 +186,39 @@ def apply_archive_action_plans(
         )
         applied += 1
     return applied
+
+
+def restore_archived_message(
+    client: GmailClient,
+    state: MailwyrmState,
+    message_id: str,
+) -> bool:
+    message = state.messages.get(message_id)
+    if message is None:
+        raise ValueError(f"message {message_id} is not in the local index")
+    if GMAIL_INBOX_LABEL in message.label_ids:
+        return False
+
+    client.add_labels_to_message(message_id, [GMAIL_INBOX_LABEL])
+    state.messages[message_id] = replace(
+        message,
+        label_ids=[*message.label_ids, GMAIL_INBOX_LABEL],
+    )
+    classification = state.classifications.get(message_id)
+    state.label_audit_events.append(
+        LabelAuditEvent(
+            message_id=message_id,
+            action=ACTION_RESTORE_ARCHIVE,
+            label_names=[GMAIL_INBOX_LABEL],
+            label_ids=[GMAIL_INBOX_LABEL],
+            reason="User restored archived message to inbox.",
+            classifier_version=(
+                classification.classifier_version if classification else "manual"
+            ),
+            created_at=datetime.now(UTC).isoformat(),
+        )
+    )
+    return True
 
 
 def _can_trash_after_digest(classification: ClassificationRecord) -> bool:

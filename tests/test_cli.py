@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from mailwyrm.cli import (
     actions_apply_archive_command,
+    actions_restore_archive_command,
     ensure_labels_command,
     labels_apply_command,
 )
@@ -154,6 +155,71 @@ class CliTest(unittest.TestCase):
             "Archived 1 message(s) by removing Gmail's INBOX label.",
             stdout.getvalue(),
         )
+
+    def test_actions_restore_archive_restores_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=[],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                    ),
+                )
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch("mailwyrm.cli.restore_archived_message", return_value=True):
+                        with patch.object(sys, "stdout", StringIO()) as stdout:
+                            result = actions_restore_archive_command(
+                                Path("client_secret.json"),
+                                "msg-1",
+                            )
+
+        self.assertEqual(result, 0)
+        self.assertIn(
+            "Restored msg-1 to inbox by adding Gmail's INBOX label.",
+            stdout.getvalue(),
+        )
+
+    def test_actions_restore_archive_reports_unknown_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(Path(temp_dir) / "state.json", MailwyrmState())
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch.object(sys, "stderr", StringIO()) as stderr:
+                        result = actions_restore_archive_command(
+                            Path("client_secret.json"),
+                            "missing",
+                        )
+
+        self.assertEqual(result, 1)
+        self.assertIn("not in the local index", stderr.getvalue())
 
 
 if __name__ == "__main__":

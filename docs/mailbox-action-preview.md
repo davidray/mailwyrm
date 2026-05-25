@@ -39,6 +39,18 @@ The apply command requires a token with `gmail.modify`:
 uv run mailwyrm auth --scope modify --client-secret /path/to/client_secret.json
 ```
 
+## Archive Restore
+
+Mailwyrm can restore a previously archived local message to the Gmail inbox by message ID:
+
+```sh
+uv run mailwyrm actions restore-archive <gmail-message-id> --client-secret /path/to/client_secret.json
+```
+
+This re-adds Gmail's `INBOX` label, updates the local message labels, and writes a local audit event. It does not remove Mailwyrm classification labels or change the message's classification.
+
+The message must already exist in the local Mailwyrm index. If Gmail has changed independently, run sync again to refresh local labels from Gmail.
+
 ## Action Vocabulary
 
 - `keep`: human correspondence should stay foregrounded.
@@ -57,4 +69,4 @@ The preview is intentionally conservative:
 - Machine mail defaults to `archive_after_digest`.
 - `trash_after_digest` only appears for low-importance machine mail with high automation safety, high confidence, and an explicit `trash` suggested action.
 
-Archive apply writes a local audit event for each archived message. A later trash command must require explicit user policy, Gmail confirmation, and an audit event before changing Gmail state.
+Archive apply and archive restore write local audit events. A later trash command must require explicit user policy, Gmail confirmation, and an audit event before changing Gmail state.

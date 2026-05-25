@@ -5,11 +5,13 @@ from mailwyrm.actions import (
     ACTION_KEEP,
     ACTION_PROTECT,
     ACTION_REVIEW,
+    ACTION_RESTORE_ARCHIVE,
     ACTION_TRASH_AFTER_DIGEST,
     apply_archive_action_plans,
     build_action_plans,
     plan_action,
     render_action_preview,
+    restore_archived_message,
 )
 from mailwyrm.models import ClassificationCorrection, ClassificationRecord, MessageRecord
 from mailwyrm.store import MailwyrmState
@@ -259,10 +261,53 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(state.messages["msg-1"].label_ids, [])
         self.assertEqual(state.label_audit_events, [])
 
+    def test_restore_archived_message_adds_inbox_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["Label_1"])},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        client = FakeGmailClient()
+
+        restored = restore_archived_message(client, state, "msg-1")
+
+        self.assertTrue(restored)
+        self.assertEqual(client.added, [("msg-1", ["INBOX"])])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1", "INBOX"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_RESTORE_ARCHIVE)
+        self.assertEqual(
+            state.label_audit_events[0].reason,
+            "User restored archived message to inbox.",
+        )
+        self.assertEqual(state.label_audit_events[0].classifier_version, "rules-v0")
+
+    def test_restore_archived_message_skips_already_inbox_messages(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1")})
+        client = FakeGmailClient()
+
+        restored = restore_archived_message(client, state, "msg-1")
+
+        self.assertFalse(restored)
+        self.assertEqual(client.added, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_restore_archived_message_rejects_unknown_message(self) -> None:
+        state = MailwyrmState()
+        client = FakeGmailClient()
+
+        with self.assertRaisesRegex(ValueError, "not in the local index"):
+            restore_archived_message(client, state, "msg-1")
+
+        self.assertEqual(client.added, [])
+
 
 class FakeGmailClient:
     def __init__(self) -> None:
+        self.added: list[tuple[str, list[str]]] = []
         self.removed: list[tuple[str, list[str]]] = []
+
+    def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.added.append((message_id, label_ids))
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
         self.removed.append((message_id, label_ids))
