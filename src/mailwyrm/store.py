@@ -19,6 +19,7 @@ from mailwyrm.models import (
 class MailwyrmState:
     account_email: str | None = None
     history_id: str | None = None
+    last_sync_mailbox: str | None = None
     messages: dict[str, MessageRecord] = field(default_factory=dict)
     classifications: dict[str, ClassificationRecord] = field(default_factory=dict)
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
@@ -45,6 +46,7 @@ class MailwyrmState:
         return cls(
             account_email=data.get("account_email"),
             history_id=data.get("history_id"),
+            last_sync_mailbox=data.get("last_sync_mailbox"),
             messages=messages,
             classifications=classifications,
             corrections=corrections,
@@ -55,6 +57,7 @@ class MailwyrmState:
         return {
             "account_email": self.account_email,
             "history_id": self.history_id,
+            "last_sync_mailbox": self.last_sync_mailbox,
             "messages": {
                 message_id: message.to_dict()
                 for message_id, message in sorted(self.messages.items())

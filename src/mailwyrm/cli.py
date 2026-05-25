@@ -28,6 +28,9 @@ from mailwyrm.oauth import (
 from mailwyrm.store import read_state, read_token, write_state, write_token
 
 
+SYNC_MAILBOXES = ("inbox", "all-mail")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -35,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "auth":
         return auth_command(args.client_secret, args.port, args.scope)
     if args.command == "sync":
-        return sync_command(args.client_secret, args.limit)
+        return sync_command(args.client_secret, args.limit, args.mailbox)
     if args.command == "ensure-labels":
         return ensure_labels_command(args.client_secret)
     if args.command == "classify":
@@ -74,6 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a Google OAuth client secret JSON file for token refresh.",
     )
     sync_parser.add_argument("--limit", default=25, type=int, help="Max messages to fetch.")
+    sync_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to sync. Defaults to inbox.",
+    )
 
     ensure_labels_parser = subparsers.add_parser(
         "ensure-labels",
@@ -186,7 +195,7 @@ def auth_command(client_secret: Path, port: int, scope_name: str) -> int:
     return 0
 
 
-def sync_command(client_secret: Path, limit: int) -> int:
+def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
     token = read_token(token_path())
     if token is None:
         print("No Gmail token found. Run `mailwyrm auth` first.", file=sys.stderr)
@@ -201,8 +210,12 @@ def sync_command(client_secret: Path, limit: int) -> int:
     state = read_state(state_path())
     state.account_email = profile.get("emailAddress")
     state.history_id = profile.get("historyId")
+    state.last_sync_mailbox = mailbox
 
-    message_refs = client.list_messages(max_results=limit)
+    message_refs = client.list_messages(
+        max_results=limit,
+        label_ids=label_ids_for_mailbox(mailbox),
+    )
     for message_ref in message_refs:
         message = client.get_message_metadata(str(message_ref["id"]))
         record = MessageRecord.from_gmail_message(message)
@@ -210,10 +223,17 @@ def sync_command(client_secret: Path, limit: int) -> int:
 
     write_state(state_path(), state)
     print(
-        f"Synced {len(message_refs)} message(s) for {state.account_email or 'unknown account'}."
+        f"Synced {len(message_refs)} {mailbox} message(s) for "
+        f"{state.account_email or 'unknown account'}."
     )
     print(f"Local index: {state_path()}")
     return 0
+
+
+def label_ids_for_mailbox(mailbox: str) -> tuple[str, ...] | None:
+    if mailbox == "all-mail":
+        return None
+    return ("INBOX",)
 
 
 def ensure_labels_command(client_secret: Path) -> int:
