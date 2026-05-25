@@ -227,9 +227,10 @@ class ActionsTest(unittest.TestCase):
         plans = build_action_plans(state)
         client = FakeGmailClient()
 
-        applied = apply_archive_action_plans(client, state, plans)
+        result = apply_archive_action_plans(client, state, plans)
 
-        self.assertEqual(applied, 1)
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.skipped_not_digested, 0)
         self.assertEqual(client.removed, [("msg-1", ["INBOX"])])
         self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1"])
         self.assertEqual(state.label_audit_events[0].action, ACTION_ARCHIVE_AFTER_DIGEST)
@@ -247,9 +248,10 @@ class ActionsTest(unittest.TestCase):
         plans = build_action_plans(state)
         client = FakeGmailClient()
 
-        applied = apply_archive_action_plans(client, state, plans)
+        result = apply_archive_action_plans(client, state, plans)
 
-        self.assertEqual(applied, 0)
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_not_digested, 1)
         self.assertEqual(client.removed, [])
         self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
         self.assertEqual(state.label_audit_events, [])
@@ -263,9 +265,10 @@ class ActionsTest(unittest.TestCase):
         plans = build_action_plans(state)
         client = FakeGmailClient()
 
-        applied = apply_archive_action_plans(client, state, plans)
+        result = apply_archive_action_plans(client, state, plans)
 
-        self.assertEqual(applied, 0)
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_not_digested, 0)
         self.assertEqual(client.removed, [])
         self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
         self.assertEqual(state.label_audit_events, [])
@@ -278,9 +281,10 @@ class ActionsTest(unittest.TestCase):
         plans = build_action_plans(state, mailbox="all-mail")
         client = FakeGmailClient()
 
-        applied = apply_archive_action_plans(client, state, plans)
+        result = apply_archive_action_plans(client, state, plans)
 
-        self.assertEqual(applied, 0)
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_not_digested, 0)
         self.assertEqual(client.removed, [])
         self.assertEqual(state.messages["msg-1"].label_ids, [])
         self.assertEqual(state.label_audit_events, [])

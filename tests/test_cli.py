@@ -132,14 +132,20 @@ class CliTest(unittest.TestCase):
                 )
 
                 with patch.object(sys, "stdout", StringIO()) as stdout:
-                    result = digest_command(None)
+                    with patch("mailwyrm.cli.datetime") as fake_datetime:
+                        fake_datetime.now.return_value.date.return_value.isoformat.return_value = (
+                            "2026-05-25"
+                        )
+                        result = digest_command(None)
                 from mailwyrm.store import read_state
 
                 loaded = read_state(state_path)
 
         self.assertEqual(result, 0)
         self.assertIn("Marked 1 message(s) as digested.", stdout.getvalue())
+        self.assertIn("# Mailwyrm Machine Digest - 2026-05-25", stdout.getvalue())
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
+        self.assertEqual(loaded.digest_audit_events[0].digest_title_date, "2026-05-25")
 
     def test_actions_apply_archive_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -183,7 +189,15 @@ class CliTest(unittest.TestCase):
                 )
 
                 with patch("mailwyrm.cli.GmailClient"):
-                    with patch("mailwyrm.cli.apply_archive_action_plans", return_value=1):
+                    from mailwyrm.actions import ArchiveApplyResult
+
+                    with patch(
+                        "mailwyrm.cli.apply_archive_action_plans",
+                        return_value=ArchiveApplyResult(
+                            applied=1,
+                            skipped_not_digested=2,
+                        ),
+                    ):
                         with patch.object(sys, "stdout", StringIO()) as stdout:
                             result = actions_apply_archive_command(
                                 Path("client_secret.json"),
@@ -198,6 +212,10 @@ class CliTest(unittest.TestCase):
         self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.82\tHello", stdout.getvalue())
         self.assertIn(
             "Archived 1 message(s) by removing Gmail's INBOX label.",
+            stdout.getvalue(),
+        )
+        self.assertIn(
+            "Skipped 2 archive candidate(s) because they have not appeared in a digest yet.",
             stdout.getvalue(),
         )
 
