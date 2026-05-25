@@ -40,6 +40,7 @@ The user may use short commands for common project workflows:
 - `rs`: Restart the desktop app, or start it if it is not running. If no desktop app process exists yet, explain that and give the closest available run command.
 - `tst`: Prepare the environment for testing and give concise test instructions, including any live Gmail steps when relevant.
 - `md`: The work-in-progress PR has been tested and merged; check out `main`, pull the latest changes, and clean up local state where safe.
+- `wn`: Answer "What's next?" with the recommended next project step.
 
 Treat these as conversational shortcuts, not shell commands, unless matching executable project commands are added later.
 
