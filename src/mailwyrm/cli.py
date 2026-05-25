@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -173,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     daily_parser = subparsers.add_parser(
         "daily",
-        help="Preview the daily machine-mail workflow without mutating Gmail.",
+        help="Preview or apply the daily machine-mail workflow.",
     )
     daily_subparsers = daily_parser.add_subparsers(dest="daily_command")
     daily_preview_parser = daily_subparsers.add_parser(
@@ -187,6 +188,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max label and action plans to preview. Defaults to all eligible messages.",
     )
     daily_preview_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope for mailbox actions. Defaults to inbox.",
+    )
+    daily_apply_parser = daily_subparsers.add_parser(
+        "apply",
+        help=(
+            "Render the daily report, mark digest items, apply digested labels, "
+            "and archive eligible messages."
+        ),
+    )
+    daily_apply_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    daily_apply_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max label and action plans to apply. Defaults to all eligible messages.",
+    )
+    daily_apply_parser.add_argument(
         "--mailbox",
         choices=SYNC_MAILBOXES,
         default="inbox",
@@ -503,10 +529,16 @@ def digest_labels_apply_command(client_secret: Path, limit: int | None) -> int:
 
 
 def daily_command(args: argparse.Namespace) -> int:
-    if args.daily_command != "preview":
-        print("Choose `preview`.", file=sys.stderr)
-        return 1
+    if args.daily_command == "preview":
+        return daily_preview_command(args.limit, args.mailbox)
+    if args.daily_command == "apply":
+        return daily_apply_command(args.client_secret, args.limit, args.mailbox)
 
+    print("Choose `preview` or `apply`.", file=sys.stderr)
+    return 1
+
+
+def daily_preview_command(limit: int | None, mailbox: str) -> int:
     state = read_state(state_path())
     if not state.messages:
         print("No local messages. Run `mailwyrm sync` first.", file=sys.stderr)
@@ -520,10 +552,75 @@ def daily_command(args: argparse.Namespace) -> int:
         render_daily_preview(
             state,
             title_date=title_date,
-            limit=args.limit,
-            mailbox=args.mailbox,
+            limit=limit,
+            mailbox=mailbox,
         )
     )
+    return 0
+
+
+def daily_apply_command(client_secret: Path, limit: int | None, mailbox: str) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    if not state.messages:
+        print("No local messages. Run `mailwyrm sync` first.", file=sys.stderr)
+        return 1
+    if not state.classifications:
+        print("No local classifications. Run `mailwyrm classify` first.", file=sys.stderr)
+        return 1
+
+    title_date = datetime.now(UTC).date().isoformat()
+    preview_state = copy.deepcopy(state)
+    mark_digest_items(preview_state, title_date=title_date)
+    print(
+        render_daily_preview(
+            preview_state,
+            title_date=title_date,
+            limit=limit,
+            mailbox=mailbox,
+            mutates_gmail=True,
+        )
+    )
+
+    marked = mark_digest_items(state, title_date=title_date)
+    digested_label_plans = build_digested_label_plans(state, limit=limit)
+    action_plans = build_action_plans(state, limit=limit, mailbox=mailbox)
+
+    client = GmailClient(token)
+    labels_applied = apply_digested_label_plans(client, state, digested_label_plans)
+    write_state(state_path(), state)
+    archive_result = apply_archive_action_plans(client, state, action_plans)
+    write_state(state_path(), state)
+
+    print(f"Marked {marked} message(s) as digested.")
+    print(f"Applied Mailwyrm/Digested label to {labels_applied} message(s).")
+    print(
+        f"Archived {archive_result.applied} message(s) by removing Gmail's INBOX label."
+    )
+    if archive_result.skipped_not_digested:
+        print(
+            f"Skipped {archive_result.skipped_not_digested} archive candidate(s) "
+            "because they have not appeared in a digest yet."
+        )
+    print("Trash actions were not applied.")
     return 0
 
 
