@@ -168,6 +168,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Max label plans to preview. Defaults to all classified messages.",
     )
+    labels_preview_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to label. Defaults to inbox.",
+    )
     labels_apply_parser = labels_subparsers.add_parser(
         "apply",
         help="Apply Gmail labels from local classifications.",
@@ -183,6 +189,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         type=int,
         help="Max messages to label. Defaults to all classified messages.",
+    )
+    labels_apply_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to label. Defaults to inbox.",
     )
 
     return parser
@@ -331,17 +343,17 @@ def corrections_command() -> int:
 def labels_command(args: argparse.Namespace) -> int:
     if args.labels_command == "preview":
         state = read_state(state_path())
-        plans = build_label_plans(state, limit=args.limit)
+        plans = build_label_plans(state, limit=args.limit, mailbox=args.mailbox)
         print(render_label_preview(plans))
         return 0
     if args.labels_command == "apply":
-        return labels_apply_command(args.client_secret, args.limit)
+        return labels_apply_command(args.client_secret, args.limit, args.mailbox)
 
     print("Choose `preview` or `apply`.", file=sys.stderr)
     return 1
 
 
-def labels_apply_command(client_secret: Path, limit: int | None) -> int:
+def labels_apply_command(client_secret: Path, limit: int | None, mailbox: str) -> int:
     token = read_token(token_path())
     if token is None:
         print(
@@ -362,7 +374,7 @@ def labels_apply_command(client_secret: Path, limit: int | None) -> int:
         write_token(token_path(), token)
 
     state = read_state(state_path())
-    plans = build_label_plans(state, limit=limit)
+    plans = build_label_plans(state, limit=limit, mailbox=mailbox)
     if not plans:
         print("No classified messages are ready for Gmail labels.")
         return 0

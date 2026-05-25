@@ -80,7 +80,11 @@ class CliTest(unittest.TestCase):
                 with patch("mailwyrm.cli.GmailClient"):
                     with patch("mailwyrm.cli.apply_label_plans", return_value=1):
                         with patch.object(sys, "stdout", StringIO()) as stdout:
-                            result = labels_apply_command(Path("client_secret.json"), 1)
+                            result = labels_apply_command(
+                                Path("client_secret.json"),
+                                1,
+                                "inbox",
+                            )
 
         self.assertEqual(result, 0)
         self.assertIn("Message ID\tLabels\tSubject", stdout.getvalue())

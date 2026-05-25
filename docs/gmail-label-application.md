@@ -11,15 +11,19 @@ Preview labels from local classifications:
 ```sh
 uv run mailwyrm labels preview
 uv run mailwyrm labels preview --limit 10
+uv run mailwyrm labels preview --mailbox all-mail --limit 500
 ```
 
 Apply labels to Gmail messages:
 
 ```sh
 uv run mailwyrm labels apply --limit 10 --client-secret /path/to/client_secret.json
+uv run mailwyrm labels apply --mailbox all-mail --limit 500 --client-secret /path/to/client_secret.json
 ```
 
 The apply command prints the same label plan report as preview before mutating Gmail.
+
+The default mailbox scope is `inbox`. Use `all-mail` explicitly for cleanup workflows that include archived messages.
 
 The apply command requires a token with `gmail.modify`:
 

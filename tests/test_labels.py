@@ -23,6 +23,18 @@ def message(message_id: str = "msg-1") -> MessageRecord:
     )
 
 
+def archived_message(message_id: str = "msg-2") -> MessageRecord:
+    return MessageRecord(
+        id=message_id,
+        thread_id="thread-2",
+        history_id="11",
+        internal_date="1710000000001",
+        label_ids=[],
+        snippet="Snippet",
+        headers={"Subject": "Archived"},
+    )
+
+
 def classification(
     message_id: str = "msg-1",
     *,
@@ -123,6 +135,38 @@ class LabelsTest(unittest.TestCase):
 
         self.assertIn("Message ID\tLabels\tSubject", preview)
         self.assertIn("msg-1\tMailwyrm/Machine\tHello", preview)
+
+    def test_build_label_plans_defaults_to_inbox_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1"),
+                "msg-2": archived_message("msg-2"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+        )
+
+        plans = build_label_plans(state)
+
+        self.assertEqual([plan.message.id for plan in plans], ["msg-1"])
+
+    def test_build_label_plans_all_mail_includes_archived_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1"),
+                "msg-2": archived_message("msg-2"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+        )
+
+        plans = build_label_plans(state, mailbox="all-mail")
+
+        self.assertEqual([plan.message.id for plan in plans], ["msg-2", "msg-1"])
 
     def test_apply_label_plans_adds_missing_labels_and_audit_event(self) -> None:
         state = MailwyrmState(

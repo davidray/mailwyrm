@@ -28,7 +28,12 @@ class LabelPlan:
     label_names: list[str]
 
 
-def build_label_plans(state: MailwyrmState, *, limit: int | None = None) -> list[LabelPlan]:
+def build_label_plans(
+    state: MailwyrmState,
+    *,
+    limit: int | None = None,
+    mailbox: str = "inbox",
+) -> list[LabelPlan]:
     plans: list[LabelPlan] = []
     messages = sorted(
         state.messages.values(),
@@ -36,6 +41,8 @@ def build_label_plans(state: MailwyrmState, *, limit: int | None = None) -> list
         reverse=True,
     )
     for message in messages:
+        if not _message_matches_mailbox(message, mailbox):
+            continue
         classification = state.classifications.get(message.id)
         if not classification:
             continue
@@ -55,6 +62,12 @@ def build_label_plans(state: MailwyrmState, *, limit: int | None = None) -> list
         if limit is not None and len(plans) >= limit:
             break
     return plans
+
+
+def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
+    if mailbox == "all-mail":
+        return True
+    return "INBOX" in message.label_ids
 
 
 def labels_for_classification(classification: ClassificationRecord) -> list[str]:
