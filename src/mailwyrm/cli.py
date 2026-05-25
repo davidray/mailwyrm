@@ -606,6 +606,7 @@ def daily_apply_command(client_secret: Path, limit: int | None, mailbox: str) ->
 
     client = GmailClient(token)
     labels_applied = apply_digested_label_plans(client, state, digested_label_plans)
+    write_state(state_path(), state)
     archive_result = apply_archive_action_plans(client, state, action_plans)
     write_state(state_path(), state)
 

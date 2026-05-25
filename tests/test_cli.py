@@ -292,6 +292,92 @@ class CliTest(unittest.TestCase):
         self.assertEqual(len(loaded.digest_audit_events), 1)
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
 
+    def test_daily_apply_persists_digested_labels_before_archive_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                state_path = Path(temp_dir) / "state.json"
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    state_path,
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="medium",
+                                automation_safety="medium",
+                                confidence=0.82,
+                                reason="Automated sender or subject pattern.",
+                                suggested_actions=["digest"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                    ),
+                )
+
+                def apply_digested(_client, state, _plans):
+                    from mailwyrm.models import LabelAuditEvent
+
+                    state.label_audit_events.append(
+                        LabelAuditEvent(
+                            message_id="msg-1",
+                            action="add_digested_label",
+                            label_names=["Mailwyrm/Digested"],
+                            label_ids=["label-digested"],
+                            reason="Automated sender or subject pattern.",
+                            classifier_version="rules-v0",
+                            created_at="2026-05-25T00:00:00+00:00",
+                        )
+                    )
+                    return 1
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch(
+                        "mailwyrm.cli.apply_digested_label_plans",
+                        side_effect=apply_digested,
+                    ):
+                        with patch(
+                            "mailwyrm.cli.apply_archive_action_plans",
+                            side_effect=RuntimeError("archive failed"),
+                        ):
+                            with patch.object(sys, "stdout", StringIO()):
+                                with patch("mailwyrm.cli.datetime") as fake_datetime:
+                                    fake_datetime.now.return_value.date.return_value.isoformat.return_value = (
+                                        "2026-05-25"
+                                    )
+                                    with self.assertRaises(RuntimeError):
+                                        daily_apply_command(
+                                            Path("client_secret.json"),
+                                            1,
+                                            "inbox",
+                                        )
+                from mailwyrm.store import read_state
+
+                loaded = read_state(state_path)
+
+        self.assertEqual(len(loaded.digest_audit_events), 1)
+        self.assertEqual(len(loaded.label_audit_events), 1)
+        self.assertEqual(loaded.label_audit_events[0].action, "add_digested_label")
+
     def test_actions_apply_archive_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
