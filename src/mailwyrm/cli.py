@@ -7,6 +7,7 @@ from pathlib import Path
 from mailwyrm import __version__
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
+from mailwyrm.digest import render_digest
 from mailwyrm.gmail import GmailClient
 from mailwyrm.models import MessageRecord
 from mailwyrm.oauth import add_auth_arguments, authorize, refresh_token, token_is_expired
@@ -23,6 +24,8 @@ def main(argv: list[str] | None = None) -> int:
         return sync_command(args.client_secret, args.limit)
     if args.command == "classify":
         return classify_command(args.limit)
+    if args.command == "digest":
+        return digest_command(args.output)
     if args.command == "list":
         return list_command(args.limit, args.show_classification)
 
@@ -59,6 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         type=int,
         help="Max messages to classify. Defaults to all locally indexed messages.",
+    )
+
+    digest_parser = subparsers.add_parser(
+        "digest",
+        help="Render a local machine-mail digest without mutating Gmail.",
+    )
+    digest_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path to write the Markdown digest. Prints to stdout by default.",
     )
 
     list_parser = subparsers.add_parser(
@@ -130,6 +143,25 @@ def classify_command(limit: int | None) -> int:
 
     write_state(state_path(), state)
     print(f"Classified {len(selected_messages)} message(s) locally.")
+    return 0
+
+
+def digest_command(output: Path | None) -> int:
+    state = read_state(state_path())
+    if not state.messages:
+        print("No local messages. Run `mailwyrm sync` first.", file=sys.stderr)
+        return 1
+    if not state.classifications:
+        print("No local classifications. Run `mailwyrm classify` first.", file=sys.stderr)
+        return 1
+
+    digest = render_digest(state)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(f"{digest}\n", encoding="utf-8")
+        print(f"Wrote digest to {output}")
+    else:
+        print(digest)
     return 0
 
 

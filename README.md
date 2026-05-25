@@ -26,6 +26,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [ADR 0001](docs/decisions/0001-gmail-is-source-of-truth.md): decision to keep Gmail as the source of truth.
 - [Gmail read-only sync spike](docs/gmail-readonly-sync.md): first implementation step for OAuth and metadata sync.
 - [Local classification spike](docs/local-classification.md): local-only human, machine, and needs-review classification.
+- [Digest preview spike](docs/digest-preview.md): local Markdown digest for machine and protected review mail.
 
 ## Development
 
