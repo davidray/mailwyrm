@@ -67,6 +67,23 @@ class DailyPreviewTest(unittest.TestCase):
         self.assertIn("No Gmail actions will be performed.", preview)
         self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.86\tReceipt", preview)
 
+    def test_daily_preview_can_report_pending_gmail_mutation(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Receipt")},
+            classifications={"msg-1": classification("msg-1")},
+            digest_audit_events=[digest_event("msg-1")],
+        )
+
+        preview = render_daily_preview(
+            state,
+            title_date="2026-05-25",
+            mutates_gmail=True,
+        )
+
+        self.assertIn("Gmail labels and archive state may be changed", preview)
+        self.assertIn("Gmail will be modified after this preview.", preview)
+        self.assertIn("Trash is not applied.", preview)
+
     def test_daily_preview_does_not_mark_digest_items(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", "Receipt")},

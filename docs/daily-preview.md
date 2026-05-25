@@ -1,4 +1,4 @@
-# Daily Preview
+# Daily Workflow
 
 `mailwyrm daily preview` renders the first single-report daily machine-mail workflow.
 
@@ -20,3 +20,22 @@ uv run mailwyrm daily preview --mailbox all-mail --limit 100
 ```
 
 Archive apply remains gated to messages that have already appeared in a digest. The daily preview may show archive candidates, but the Gmail-mutating archive command will still skip candidates that lack a local digest audit event.
+
+## Apply
+
+`mailwyrm daily apply` performs the conservative daily workflow in one command:
+
+1. Render the combined daily report.
+2. Mark included digest items in the local audit log.
+3. Apply the Gmail-visible `Mailwyrm/Digested` label.
+4. Archive eligible `archive_after_digest` messages by removing Gmail's `INBOX` label.
+
+It does not apply `trash_after_digest`. Trash remains a future explicit-policy step.
+
+Example:
+
+```sh
+uv run mailwyrm daily apply --limit 25 --client-secret /path/to/client_secret.json
+```
+
+The apply command requires a stored Gmail token with `gmail.modify`, because it may apply labels and archive messages in Gmail. It prints the same combined daily report before mutating Gmail. For apply, the report is rendered from a projected local state that includes the digest audit marks the command is about to write, so the digested-label section reflects the labels that can be applied during the same run.
