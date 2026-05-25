@@ -5,6 +5,7 @@ from pathlib import Path
 from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
+    LabelAuditEvent,
     MessageRecord,
 )
 from mailwyrm.store import MailwyrmState, read_state, write_state
@@ -49,6 +50,17 @@ class StoreTest(unittest.TestCase):
                         reason="Known newsletter.",
                     )
                 },
+                label_audit_events=[
+                    LabelAuditEvent(
+                        message_id="msg-1",
+                        action="add_labels",
+                        label_names=["Mailwyrm/Machine"],
+                        label_ids=["Label_1"],
+                        reason="Known newsletter.",
+                        classifier_version="rules-v0+user-correction",
+                        created_at="2026-05-25T00:00:00+00:00",
+                    )
+                ],
             )
 
             write_state(path, state)
@@ -60,6 +72,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
         self.assertEqual(loaded.classifications["msg-1"].category, "human")
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
+        self.assertEqual(loaded.label_audit_events[0].label_ids, ["Label_1"])
         self.assertEqual(mode, 0o600)
 
 

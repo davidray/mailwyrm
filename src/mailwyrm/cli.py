@@ -11,6 +11,7 @@ from mailwyrm.corrections import CorrectionError, add_correction, correction_rep
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import render_digest
 from mailwyrm.gmail import GmailClient
+from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
 from mailwyrm.models import (
     CLASSIFICATION_CATEGORIES,
     GMAIL_MODIFY_SCOPE,
@@ -47,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         return corrections_command()
     if args.command == "list":
         return list_command(args.limit, args.show_classification)
+    if args.command == "labels":
+        return labels_command(args)
 
     parser.print_help()
     return 1
@@ -139,6 +142,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-classification",
         action="store_true",
         help="Include local classification category and reason.",
+    )
+
+    labels_parser = subparsers.add_parser(
+        "labels",
+        help="Preview or apply Gmail-visible labels from local classifications.",
+    )
+    labels_subparsers = labels_parser.add_subparsers(dest="labels_command")
+    labels_preview_parser = labels_subparsers.add_parser(
+        "preview",
+        help="Preview Gmail labels that would be applied.",
+    )
+    labels_preview_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max label plans to preview. Defaults to all classified messages.",
+    )
+    labels_apply_parser = labels_subparsers.add_parser(
+        "apply",
+        help="Apply Gmail labels from local classifications.",
+    )
+    labels_apply_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    labels_apply_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max messages to label. Defaults to all classified messages.",
     )
 
     return parser
@@ -270,6 +305,53 @@ def correct_command(args: argparse.Namespace) -> int:
 def corrections_command() -> int:
     state = read_state(state_path())
     print(correction_report(state))
+    return 0
+
+
+def labels_command(args: argparse.Namespace) -> int:
+    if args.labels_command == "preview":
+        state = read_state(state_path())
+        plans = build_label_plans(state, limit=args.limit)
+        print(render_label_preview(plans))
+        return 0
+    if args.labels_command == "apply":
+        return labels_apply_command(args.client_secret, args.limit)
+
+    print("Choose `preview` or `apply`.", file=sys.stderr)
+    return 1
+
+
+def labels_apply_command(client_secret: Path, limit: int | None) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    plans = build_label_plans(state, limit=limit)
+    if not plans:
+        print("No classified messages are ready for Gmail labels.")
+        return 0
+
+    print(render_label_preview(plans))
+    client = GmailClient(token)
+    applied = apply_label_plans(client, state, plans)
+    write_state(state_path(), state)
+    print(f"Applied Gmail labels to {applied} message(s).")
     return 0
 
 

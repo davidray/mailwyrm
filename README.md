@@ -29,6 +29,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Digest preview spike](docs/digest-preview.md): local Markdown digest for machine and protected review mail.
 - [Classification corrections](docs/classification-corrections.md): local user feedback for classifier evaluation.
 - [Gmail label setup](docs/gmail-label-setup.md): explicit setup for Gmail-visible Mailwyrm labels.
+- [Gmail label application](docs/gmail-label-application.md): preview and explicitly apply Gmail labels from local classifications.
 
 ## Development
 

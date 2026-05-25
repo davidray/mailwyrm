@@ -147,3 +147,29 @@ class ClassificationCorrection:
             machine_type=data.get("machine_type"),
             reason=str(data.get("reason", "")),
         )
+
+
+@dataclass(frozen=True)
+class LabelAuditEvent:
+    message_id: str
+    action: str
+    label_names: list[str]
+    label_ids: list[str]
+    reason: str
+    classifier_version: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LabelAuditEvent":
+        return cls(
+            message_id=str(data["message_id"]),
+            action=str(data["action"]),
+            label_names=[str(label) for label in data.get("label_names", [])],
+            label_ids=[str(label) for label in data.get("label_ids", [])],
+            reason=str(data.get("reason", "")),
+            classifier_version=str(data.get("classifier_version", "")),
+            created_at=str(data["created_at"]),
+        )

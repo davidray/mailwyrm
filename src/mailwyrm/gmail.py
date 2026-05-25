@@ -88,6 +88,15 @@ class GmailClient:
             ensured[label_name] = label
         return ensured
 
+    def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
+        self._post(
+            f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
+            {
+                "addLabelIds": label_ids,
+                "removeLabelIds": [],
+            },
+        )
+
     def _get(self, path: str) -> dict[str, Any]:
         return self._request(f"{GMAIL_API_BASE}{path}")
 
