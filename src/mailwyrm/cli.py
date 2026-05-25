@@ -347,6 +347,7 @@ def labels_apply_command(client_secret: Path, limit: int | None) -> int:
         print("No classified messages are ready for Gmail labels.")
         return 0
 
+    print(render_label_preview(plans))
     client = GmailClient(token)
     applied = apply_label_plans(client, state, plans)
     write_state(state_path(), state)
