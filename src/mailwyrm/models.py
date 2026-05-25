@@ -12,6 +12,15 @@ ClassificationCategory = str
 Importance = str
 AutomationSafety = str
 
+CLASSIFICATION_CATEGORIES = ("human", "machine", "needs_review")
+MACHINE_TYPES = (
+    "transactional",
+    "delivery",
+    "newsletter",
+    "security",
+    "notification",
+)
+
 
 @dataclass(frozen=True)
 class GmailToken:
@@ -108,4 +117,24 @@ class ClassificationRecord:
             reason=str(data["reason"]),
             suggested_actions=[str(action) for action in data.get("suggested_actions", [])],
             classifier_version=str(data["classifier_version"]),
+        )
+
+
+@dataclass(frozen=True)
+class ClassificationCorrection:
+    message_id: str
+    category: ClassificationCategory
+    machine_type: str | None
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ClassificationCorrection":
+        return cls(
+            message_id=str(data["message_id"]),
+            category=str(data["category"]),
+            machine_type=data.get("machine_type"),
+            reason=str(data.get("reason", "")),
         )

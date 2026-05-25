@@ -27,6 +27,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Gmail read-only sync spike](docs/gmail-readonly-sync.md): first implementation step for OAuth and metadata sync.
 - [Local classification spike](docs/local-classification.md): local-only human, machine, and needs-review classification.
 - [Digest preview spike](docs/digest-preview.md): local Markdown digest for machine and protected review mail.
+- [Classification corrections](docs/classification-corrections.md): local user feedback for classifier evaluation.
 
 ## Development
 

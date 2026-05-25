@@ -2,7 +2,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mailwyrm.models import ClassificationRecord, MessageRecord
+from mailwyrm.models import (
+    ClassificationCorrection,
+    ClassificationRecord,
+    MessageRecord,
+)
 from mailwyrm.store import MailwyrmState, read_state, write_state
 
 
@@ -37,6 +41,14 @@ class StoreTest(unittest.TestCase):
                         classifier_version="rules-v0",
                     )
                 },
+                corrections={
+                    "msg-1": ClassificationCorrection(
+                        message_id="msg-1",
+                        category="machine",
+                        machine_type="newsletter",
+                        reason="Known newsletter.",
+                    )
+                },
             )
 
             write_state(path, state)
@@ -47,6 +59,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.history_id, "123")
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
         self.assertEqual(loaded.classifications["msg-1"].category, "human")
+        self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
         self.assertEqual(mode, 0o600)
 
 

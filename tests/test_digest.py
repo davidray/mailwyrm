@@ -1,7 +1,11 @@
 import unittest
 
 from mailwyrm.digest import render_digest
-from mailwyrm.models import ClassificationRecord, MessageRecord
+from mailwyrm.models import (
+    ClassificationCorrection,
+    ClassificationRecord,
+    MessageRecord,
+)
 from mailwyrm.store import MailwyrmState
 
 
@@ -34,6 +38,20 @@ def classification(
         reason="Automated sender or subject pattern.",
         suggested_actions=["digest"],
         classifier_version="rules-v0",
+    )
+
+
+def classification_correction(
+    message_id: str,
+    *,
+    category: str,
+    machine_type: str | None,
+) -> ClassificationCorrection:
+    return ClassificationCorrection(
+        message_id=message_id,
+        category=category,
+        machine_type=machine_type,
+        reason="User correction.",
     )
 
 
@@ -71,6 +89,24 @@ class DigestTest(unittest.TestCase):
 
         self.assertIn("Items: 0", digest)
         self.assertNotIn("Re: dinner", digest)
+
+    def test_digest_uses_corrected_classification(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Weekly update")},
+            classifications={
+                "msg-1": classification("msg-1", category="human", machine_type=None)
+            },
+        )
+        state.corrections["msg-1"] = classification_correction(
+            "msg-1",
+            category="machine",
+            machine_type="newsletter",
+        )
+
+        digest = render_digest(state, title_date="2026-05-25")
+
+        self.assertIn("## Newsletters", digest)
+        self.assertIn("Weekly update", digest)
 
     def test_digest_includes_high_importance_review_items(self) -> None:
         state = MailwyrmState(

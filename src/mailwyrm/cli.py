@@ -7,9 +7,11 @@ from pathlib import Path
 from mailwyrm import __version__
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
+from mailwyrm.corrections import CorrectionError, add_correction, correction_report
+from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import render_digest
 from mailwyrm.gmail import GmailClient
-from mailwyrm.models import MessageRecord
+from mailwyrm.models import CLASSIFICATION_CATEGORIES, MACHINE_TYPES, MessageRecord
 from mailwyrm.oauth import add_auth_arguments, authorize, refresh_token, token_is_expired
 from mailwyrm.store import read_state, read_token, write_state, write_token
 
@@ -26,6 +28,10 @@ def main(argv: list[str] | None = None) -> int:
         return classify_command(args.limit)
     if args.command == "digest":
         return digest_command(args.output)
+    if args.command == "correct":
+        return correct_command(args)
+    if args.command == "corrections":
+        return corrections_command()
     if args.command == "list":
         return list_command(args.limit, args.show_classification)
 
@@ -72,6 +78,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help="Optional path to write the Markdown digest. Prints to stdout by default.",
+    )
+
+    correct_parser = subparsers.add_parser(
+        "correct",
+        help="Store a local user correction for a message classification.",
+    )
+    correct_parser.add_argument("message_id", help="Gmail message ID from `mailwyrm list`.")
+    correct_parser.add_argument(
+        "category",
+        choices=CLASSIFICATION_CATEGORIES,
+        help="Corrected classification category.",
+    )
+    correct_parser.add_argument(
+        "--machine-type",
+        choices=MACHINE_TYPES,
+        help="Optional machine subtype when category is machine.",
+    )
+    correct_parser.add_argument(
+        "--reason",
+        default="",
+        help="Optional reason for the correction.",
+    )
+
+    subparsers.add_parser(
+        "corrections",
+        help="List local classification corrections.",
     )
 
     list_parser = subparsers.add_parser(
@@ -165,6 +197,31 @@ def digest_command(output: Path | None) -> int:
     return 0
 
 
+def correct_command(args: argparse.Namespace) -> int:
+    state = read_state(state_path())
+    try:
+        correction = add_correction(
+            state,
+            message_id=args.message_id,
+            category=args.category,
+            machine_type=args.machine_type,
+            reason=args.reason,
+        )
+    except CorrectionError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    write_state(state_path(), state)
+    print(f"Corrected {correction.message_id} to {correction.category}.")
+    return 0
+
+
+def corrections_command() -> int:
+    state = read_state(state_path())
+    print(correction_report(state))
+    return 0
+
+
 def list_command(limit: int, show_classification: bool) -> int:
     state = read_state(state_path())
     messages = sorted(
@@ -183,6 +240,10 @@ def list_command(limit: int, show_classification: bool) -> int:
         if show_classification:
             classification = state.classifications.get(message.id)
             if classification:
+                classification = effective_classification(
+                    classification,
+                    state.corrections.get(message.id),
+                )
                 fields.extend([classification.category, classification.reason])
             else:
                 fields.extend(["unclassified", ""])
