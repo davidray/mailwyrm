@@ -9,9 +9,13 @@ Example:
 ```sh
 uv run mailwyrm app
 uv run mailwyrm app --mailbox all-mail --limit 50 --audit-limit 25
+uv run mailwyrm app --client-secret /path/to/client_secret.json
 ```
 
 By default the app listens at `http://127.0.0.1:8766`.
+If `--client-secret` is provided, or `MAILWYRM_CLIENT_SECRET` is set, the
+browser shows copyable Gmail CLI commands with that path instead of a
+placeholder.
 
 The app exposes:
 

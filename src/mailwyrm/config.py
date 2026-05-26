@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 APP_DIR_ENV = "MAILWYRM_HOME"
+CLIENT_SECRET_ENV = "MAILWYRM_CLIENT_SECRET"
 DEFAULT_APP_DIR = Path.home() / ".mailwyrm"
 
 
@@ -20,3 +21,7 @@ def token_path() -> Path:
 def state_path() -> Path:
     return app_dir() / "state.json"
 
+
+def client_secret_path() -> Path | None:
+    configured = os.environ.get(CLIENT_SECRET_ENV)
+    return Path(configured).expanduser() if configured else None

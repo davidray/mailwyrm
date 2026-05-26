@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from shlex import quote
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from mailwyrm.actions import (
@@ -30,6 +32,7 @@ def build_daily_cockpit_payload(
     limit: int | None = 25,
     mailbox: str = "inbox",
     audit_limit: int = 10,
+    client_secret: Path | None = None,
 ) -> dict[str, Any]:
     if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
@@ -75,6 +78,7 @@ def build_daily_cockpit_payload(
             mailbox=mailbox,
             limit=limit,
             policy=state.automation_policy,
+            client_secret=client_secret,
             digested_message_ids={
                 event.message_id for event in state.digest_audit_events
             },
@@ -112,14 +116,26 @@ def build_daily_cockpit_payload(
             action_plans=action_plans,
             trash_preview=trash_preview,
             policy=state.automation_policy,
+            client_secret=client_secret,
         ),
-        "commands": [
-            "uv run mailwyrm sync --mailbox inbox --limit 25 --client-secret /path/to/client_secret.json",
-            "uv run mailwyrm classify",
-            "uv run mailwyrm daily apply --limit 25 --client-secret /path/to/client_secret.json",
-            "uv run mailwyrm actions apply-trash --limit 10 --client-secret /path/to/client_secret.json",
-        ],
+        "commands": _useful_commands(client_secret=client_secret),
+        "configuration": {
+            "client_secret_configured": client_secret is not None,
+        },
     }
+
+
+def _useful_commands(*, client_secret: Path | None) -> list[str]:
+    client_secret_arg = _client_secret_arg(client_secret)
+    return [
+        "uv run mailwyrm sync --mailbox inbox --limit 25"
+        f"{client_secret_arg}",
+        "uv run mailwyrm classify",
+        "uv run mailwyrm daily apply --limit 25"
+        f"{client_secret_arg}",
+        "uv run mailwyrm actions apply-trash --limit 10"
+        f"{client_secret_arg}",
+    ]
 
 
 def _cleanup_payload(
@@ -129,6 +145,7 @@ def _cleanup_payload(
     mailbox: str,
     limit: int | None,
     policy,
+    client_secret: Path | None,
     digested_message_ids: set[str],
 ) -> dict[str, Any]:
     action_counts = _action_counts(action_plans)
@@ -150,6 +167,7 @@ def _cleanup_payload(
     kept_human = action_counts[ACTION_KEEP]
     limit_arg = "" if limit is None else f" --limit {limit}"
     mailbox_arg = f" --mailbox {mailbox}"
+    client_secret_arg = _client_secret_arg(client_secret)
 
     return {
         "mailbox": mailbox,
@@ -165,7 +183,7 @@ def _cleanup_payload(
             "apply_command": (
                 "uv run mailwyrm actions apply-archive"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
         "trash": {
@@ -180,7 +198,7 @@ def _cleanup_payload(
             "apply_command": (
                 "uv run mailwyrm actions apply-trash"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
         "protected_or_review": review_or_protected,
@@ -298,6 +316,7 @@ def _workflow_controls(
     action_plans,
     trash_preview,
     policy,
+    client_secret: Path | None,
 ) -> list[dict[str, Any]]:
     limit_arg = "" if limit is None else f" --limit {limit}"
     mailbox_arg = f" --mailbox {mailbox}"
@@ -306,6 +325,7 @@ def _workflow_controls(
     trash_count = len(trash_preview.plans)
     label_count = len(action_plans)
     classify_count = _unclassified_message_count(state, mailbox=mailbox, limit=limit)
+    client_secret_arg = _client_secret_arg(client_secret)
 
     return [
         {
@@ -319,7 +339,7 @@ def _workflow_controls(
             "primary_command": (
                 "uv run mailwyrm sync"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
         {
@@ -360,7 +380,7 @@ def _workflow_controls(
             "primary_command": (
                 "uv run mailwyrm labels apply"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
         {
@@ -378,7 +398,7 @@ def _workflow_controls(
             "primary_command": (
                 "uv run mailwyrm actions apply-archive"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
         {
@@ -400,10 +420,16 @@ def _workflow_controls(
             "primary_command": (
                 "uv run mailwyrm actions apply-trash"
                 f"{mailbox_arg}{limit_arg}"
-                " --client-secret /path/to/client_secret.json"
+                f"{client_secret_arg}"
             ),
         },
     ]
+
+
+def _client_secret_arg(client_secret: Path | None) -> str:
+    if client_secret is None:
+        return " --client-secret /path/to/client_secret.json"
+    return f" --client-secret {quote(str(client_secret.expanduser()))}"
 
 
 def _unclassified_message_count(

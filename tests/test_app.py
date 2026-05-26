@@ -13,6 +13,7 @@ from mailwyrm.app import (
     classify_local_messages,
     create_app_server,
 )
+from mailwyrm.cli import build_parser
 from mailwyrm.models import (
     AutomationPolicy,
     ClassificationRecord,
@@ -124,6 +125,15 @@ class AppTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _query_message_id({})
+
+    def test_app_parser_accepts_client_secret_for_displayed_commands(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(
+            ["app", "--client-secret", "/Users/dave/code/client_secret.json"]
+        )
+
+        self.assertEqual(str(args.client_secret), "/Users/dave/code/client_secret.json")
 
     def test_build_workflow_preview_payload_renders_daily_preview(self) -> None:
         state = MailwyrmState(

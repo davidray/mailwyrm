@@ -21,7 +21,7 @@ from mailwyrm.actions import (
     restore_trashed_message,
 )
 from mailwyrm.classifier import classify_message
-from mailwyrm.config import state_path, token_path
+from mailwyrm.config import client_secret_path, state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
 from mailwyrm.corrections import effective_classification
 from mailwyrm.daily import render_daily_cockpit, render_daily_preview, render_daily_status
@@ -103,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             args.mailbox,
             args.limit,
             args.audit_limit,
+            args.client_secret,
         )
 
     parser.print_help()
@@ -579,6 +580,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=_non_negative_int,
         help="Max recent audit events to show. Defaults to 10.",
     )
+    app_parser.add_argument(
+        "--client-secret",
+        default=None,
+        type=Path,
+        help=(
+            "Optional OAuth client secret path to show in copyable Gmail CLI "
+            "commands. Defaults to MAILWYRM_CLIENT_SECRET when set."
+        ),
+    )
 
     return parser
 
@@ -873,13 +883,16 @@ def app_command(
     mailbox: str,
     limit: int,
     audit_limit: int,
+    client_secret: Path | None = None,
 ) -> int:
+    client_secret = client_secret or client_secret_path()
     run_app_server(
         host=host,
         port=port,
         mailbox=mailbox,
         limit=limit,
         audit_limit=audit_limit,
+        client_secret=client_secret,
     )
     return 0
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
+from pathlib import Path
 from pathlib import PurePosixPath
 from urllib.parse import parse_qs, urlparse
 
@@ -37,6 +38,7 @@ def run_app_server(
     mailbox: str = "inbox",
     limit: int = 25,
     audit_limit: int = 10,
+    client_secret: Path | None = None,
 ) -> None:
     server = create_app_server(
         host=host,
@@ -44,6 +46,7 @@ def run_app_server(
         mailbox=mailbox,
         limit=limit,
         audit_limit=audit_limit,
+        client_secret=client_secret,
     )
     print(f"Mailwyrm app listening at http://{host}:{port}")
     print("Local app view. Browser actions may update local state; Gmail mutations require CLI.")
@@ -62,14 +65,26 @@ def create_app_server(
     mailbox: str = "inbox",
     limit: int = 25,
     audit_limit: int = 10,
+    client_secret: Path | None = None,
 ) -> ThreadingHTTPServer:
     if mailbox not in SUPPORTED_MAILBOXES:
         raise ValueError(_mailbox_error())
-    handler = _handler(mailbox=mailbox, limit=limit, audit_limit=audit_limit)
+    handler = _handler(
+        mailbox=mailbox,
+        limit=limit,
+        audit_limit=audit_limit,
+        client_secret=client_secret,
+    )
     return ThreadingHTTPServer((host, port), handler)
 
 
-def _handler(*, mailbox: str, limit: int, audit_limit: int):
+def _handler(
+    *,
+    mailbox: str,
+    limit: int,
+    audit_limit: int,
+    client_secret: Path | None,
+):
     class MailwyrmAppHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed_url = urlparse(self.path)
@@ -117,6 +132,7 @@ def _handler(*, mailbox: str, limit: int, audit_limit: int):
                     limit=request_limit,
                     mailbox=request_mailbox,
                     audit_limit=request_audit_limit,
+                    client_secret=client_secret,
                 )
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)

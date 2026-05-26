@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from mailwyrm.cockpit import build_daily_cockpit_payload, build_message_detail_payload
 from mailwyrm.models import (
@@ -143,6 +144,7 @@ class CockpitTest(unittest.TestCase):
             limit=1,
             mailbox="inbox",
             audit_limit=1,
+            client_secret=Path("/Users/dave/code/client_secret.json"),
         )
 
         self.assertEqual(payload["date"], "2026-05-26")
@@ -173,6 +175,19 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["cleanup"]["clearable_now"], 1)
         self.assertEqual(payload["cleanup"]["kept_human"], 0)
         self.assertEqual(payload["cleanup"]["protected_or_review"], 0)
+        self.assertTrue(payload["configuration"]["client_secret_configured"])
+        self.assertIn(
+            "--client-secret /Users/dave/code/client_secret.json",
+            payload["cleanup"]["archive"]["apply_command"],
+        )
+        self.assertIn(
+            "--client-secret /Users/dave/code/client_secret.json",
+            payload["workflows"][0]["primary_command"],
+        )
+        self.assertIn(
+            "--client-secret /Users/dave/code/client_secret.json",
+            payload["commands"][0],
+        )
         self.assertEqual(payload["trash_gate"]["policy_enabled"], True)
         self.assertEqual(payload["audit"]["showing_events"], 1)
         self.assertIn("#all/msg-2", payload["audit"]["events"][0]["gmail_url"])
@@ -199,6 +214,18 @@ class CockpitTest(unittest.TestCase):
         self.assertIn(
             "classify --mailbox inbox --limit 1",
             classify_workflow["primary_command"],
+        )
+
+    def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
+        payload = build_daily_cockpit_payload(
+            MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),
+            title_date="2026-05-26",
+        )
+
+        self.assertFalse(payload["configuration"]["client_secret_configured"])
+        self.assertIn(
+            "--client-secret /path/to/client_secret.json",
+            payload["commands"][0],
         )
 
     def test_build_daily_cockpit_payload_uses_trash_gmail_links_for_trash_scope(self) -> None:
