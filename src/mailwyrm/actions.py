@@ -67,7 +67,7 @@ def build_action_plans(
         reverse=True,
     )
     for message in messages:
-        if not _message_matches_mailbox(message, mailbox):
+        if not message_matches_mailbox(message, mailbox):
             continue
         classification = state.classifications.get(message.id)
         if classification is None:
@@ -509,7 +509,7 @@ def _is_protected(classification: ClassificationRecord) -> bool:
     )
 
 
-def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
+def message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
     if mailbox == "all-mail":
         return True
     if mailbox == "trash":

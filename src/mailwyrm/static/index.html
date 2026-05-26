@@ -27,18 +27,42 @@
 
       <section class="grid metrics" id="metrics"></section>
 
-      <section class="panel digest-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Machine correspondence</p>
-            <h2>Digest</h2>
+      <section class="grid attention-lanes">
+        <section class="panel lane-panel primary-lane">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Human correspondence</p>
+              <h2>People</h2>
+            </div>
+            <span class="counter" id="human-count"></span>
           </div>
-          <span class="counter" id="digest-count"></span>
-        </div>
-        <div class="item-list" id="digest"></div>
+          <div class="item-list" id="human-lane"></div>
+        </section>
+
+        <section class="panel lane-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Needs review</p>
+              <h2>Protected</h2>
+            </div>
+            <span class="counter" id="review-count"></span>
+          </div>
+          <div class="item-list compact" id="review-lane"></div>
+        </section>
       </section>
 
-      <section class="grid two-column">
+      <section class="grid two-column main-grid">
+        <section class="panel digest-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Machine correspondence</p>
+              <h2>Digest</h2>
+            </div>
+            <span class="counter" id="digest-count"></span>
+          </div>
+          <div class="item-list" id="digest"></div>
+        </section>
+
         <section class="panel">
           <div class="panel-heading">
             <div>
@@ -48,7 +72,9 @@
           </div>
           <div class="item-list compact" id="actions"></div>
         </section>
+      </section>
 
+      <section class="grid two-column">
         <section class="panel">
           <div class="panel-heading">
             <div>

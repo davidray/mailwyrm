@@ -37,7 +37,7 @@ The user may use short commands for common project workflows:
 
 - `fb`: Review and address pull request feedback for the current branch or explicitly named PR. After fixing and pushing, resolve the GitHub review threads that were actually addressed; leave ambiguous, unfixed, or intentionally deferred threads unresolved and call them out.
 - `pr`: Create a ready-for-review pull request for the current branch.
-- `rs`: Restart the desktop app, or start it if it is not running. If no desktop app process exists yet, explain that and give the closest available run command.
+- `rs`: Restart the local Mailwyrm app server, or start it if it is not running. Prefer the current app command (`uv run mailwyrm app --port 8766`) and leave the app available at `http://127.0.0.1:8766/`. If a future desktop wrapper exists, restart that wrapper and its app server together.
 - `tst`: Prepare the environment for testing and give concise test instructions, including any live Gmail steps when relevant.
 - `md`: The work-in-progress PR has been tested and merged; check out `main`, pull the latest changes, and clean up local state where safe.
 - `wn`: Answer "What's next?" with the recommended next project step.

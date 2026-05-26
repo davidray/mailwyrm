@@ -54,6 +54,8 @@ class CockpitTest(unittest.TestCase):
             messages={
                 "msg-1": message("msg-1", "Receipt"),
                 "msg-2": message("msg-2", "Copilot"),
+                "msg-3": message("msg-3", "Dinner"),
+                "msg-4": message("msg-4", "Security alert"),
             },
             classifications={
                 "msg-1": classification("msg-1"),
@@ -63,6 +65,21 @@ class CockpitTest(unittest.TestCase):
                     automation_safety="high",
                     confidence=0.94,
                     suggested_actions=["digest", "trash"],
+                ),
+                "msg-3": classification(
+                    "msg-3",
+                    category="human",
+                    machine_type=None,
+                    suggested_actions=[],
+                ),
+                "msg-4": classification(
+                    "msg-4",
+                    category="needs_review",
+                    machine_type="security",
+                    importance="high",
+                    automation_safety="low",
+                    confidence=0.72,
+                    suggested_actions=["review", "protect"],
                 ),
             },
             digest_audit_events=[
@@ -100,7 +117,14 @@ class CockpitTest(unittest.TestCase):
         self.assertTrue(payload["read_only"])
         self.assertEqual(payload["account"]["email"], "user@example.com")
         self.assertEqual(payload["attention"]["machine"], 2)
-        self.assertEqual(payload["digest"]["total_items"], 2)
+        self.assertEqual(payload["lanes"]["human"]["total_items"], 1)
+        self.assertEqual(payload["lanes"]["human"]["items"][0]["subject"], "Dinner")
+        self.assertEqual(payload["lanes"]["needs_review"]["total_items"], 1)
+        self.assertEqual(
+            payload["lanes"]["needs_review"]["items"][0]["action"],
+            "protect",
+        )
+        self.assertEqual(payload["digest"]["total_items"], 3)
         self.assertEqual(payload["digest"]["showing_items"], 1)
         self.assertIn("#all/msg-", payload["digest"]["items"][0]["gmail_url"])
         self.assertEqual(payload["mailbox_actions"]["mailbox"], "inbox")

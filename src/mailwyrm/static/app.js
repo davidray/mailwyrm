@@ -9,6 +9,10 @@ const els = {
   refresh: document.querySelector("#refresh"),
   status: document.querySelector("#status-strip"),
   metrics: document.querySelector("#metrics"),
+  humanCount: document.querySelector("#human-count"),
+  humanLane: document.querySelector("#human-lane"),
+  reviewCount: document.querySelector("#review-count"),
+  reviewLane: document.querySelector("#review-lane"),
   digestCount: document.querySelector("#digest-count"),
   digest: document.querySelector("#digest"),
   actions: document.querySelector("#actions"),
@@ -70,6 +74,14 @@ function renderCockpit(payload) {
   );
 
   renderMetrics(payload);
+  renderLane(els.humanLane, els.humanCount, payload.lanes.human, {
+    empty: "No human correspondence in this mailbox scope.",
+    label: "people",
+  });
+  renderLane(els.reviewLane, els.reviewCount, payload.lanes.needs_review, {
+    empty: "No protected or uncertain messages in this mailbox scope.",
+    label: "review",
+  });
   renderDigest(payload.digest);
   renderActions(payload.mailbox_actions);
   renderTrash(payload.trash_gate);
@@ -99,6 +111,22 @@ function renderMetrics(payload) {
   );
 }
 
+function renderLane(target, counter, lane, options) {
+  counter.textContent = `${lane.showing_items} of ${lane.total_items}`;
+  if (!lane.items.length) {
+    renderEmpty(target, options.empty);
+    return;
+  }
+  target.replaceChildren(
+    ...lane.items.map((item) =>
+      messageCard(item, {
+        badge: item.action || options.label,
+        showSnippet: true,
+      })
+    )
+  );
+}
+
 function renderDigest(digest) {
   els.digestCount.textContent = `${digest.showing_items} of ${digest.total_items}`;
   if (!digest.items.length) {
@@ -107,22 +135,10 @@ function renderDigest(digest) {
   }
   els.digest.replaceChildren(
     ...digest.items.map((item) =>
-      div("article", { class: "item" }, [
-        div("div", { class: "item-header" }, [
-          div("div", {}, [
-            link(item.gmail_url, item.subject),
-            div("div", { class: "meta" }, item.sender),
-          ]),
-          pill(item.machine_type || item.category),
-        ]),
-        div(
-          "p",
-          { class: "meta" },
-          `${item.importance} importance, ${item.automation_safety} safety, ${formatConfidence(item.confidence)} confidence`
-        ),
-        div("p", { class: "reason" }, item.reason),
-        item.snippet ? div("p", { class: "snippet" }, item.snippet) : "",
-      ])
+      messageCard(item, {
+        badge: item.machine_type || item.category,
+        showSnippet: true,
+      })
     )
   );
 }
@@ -159,17 +175,37 @@ function renderTrash(trash) {
 }
 
 function actionItem(plan) {
+  return messageCard(plan, {
+    badge: plan.action,
+    showSnippet: false,
+  });
+}
+
+function messageCard(item, options) {
   return div("article", { class: "item" }, [
     div("div", { class: "item-header" }, [
       div("div", {}, [
-        link(plan.gmail_url, plan.subject),
-        div("div", { class: "meta" }, plan.sender),
+        link(item.gmail_url, item.subject),
+        div("div", { class: "meta" }, item.sender),
       ]),
-      pill(plan.action),
+      pill(options.badge),
     ]),
-    div("p", { class: "reason" }, plan.reason),
-    div("p", { class: "meta" }, `${plan.category}, ${formatConfidence(plan.confidence)} confidence`),
+    div("p", { class: "reason" }, item.reason),
+    div("p", { class: "meta" }, metaLine(item)),
+    options.showSnippet && item.snippet
+      ? div("p", { class: "snippet" }, item.snippet)
+      : "",
   ]);
+}
+
+function metaLine(item) {
+  const parts = [
+    item.category,
+    item.importance ? `${item.importance} importance` : "",
+    item.automation_safety ? `${item.automation_safety} safety` : "",
+    `${formatConfidence(item.confidence)} confidence`,
+  ];
+  return parts.filter(Boolean).join(", ");
 }
 
 function renderAudit(audit) {

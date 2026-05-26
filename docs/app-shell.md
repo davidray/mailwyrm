@@ -27,6 +27,7 @@ It shows:
 
 - Account and sync state.
 - Human, machine, and needs-review counts.
+- Primary attention lanes for human correspondence and protected or uncertain messages.
 - Archive and trash policy state.
 - Machine digest items with Gmail links.
 - Mailbox action previews.

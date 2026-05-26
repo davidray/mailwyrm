@@ -10,6 +10,8 @@ class AppTest(unittest.TestCase):
 
         self.assertIn("<title>Mailwyrm</title>", static_root.joinpath("index.html").read_text())
         self.assertIn("Daily cockpit", static_root.joinpath("index.html").read_text())
+        self.assertIn("human-lane", static_root.joinpath("index.html").read_text())
+        self.assertIn("review-lane", static_root.joinpath("index.html").read_text())
         self.assertIn("/api/daily-cockpit", static_root.joinpath("app.js").read_text())
 
     def test_query_int_accepts_zero_and_positive_values(self) -> None:
