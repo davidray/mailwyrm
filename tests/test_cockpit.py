@@ -1,8 +1,9 @@
 import unittest
 
-from mailwyrm.cockpit import build_daily_cockpit_payload
+from mailwyrm.cockpit import build_daily_cockpit_payload, build_message_detail_payload
 from mailwyrm.models import (
     AutomationPolicy,
+    ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
     LabelAuditEvent,
@@ -20,6 +21,25 @@ def message(message_id: str, subject: str) -> MessageRecord:
         label_ids=["INBOX"],
         snippet="A useful local snippet.",
         headers={"From": "Sender <sender@example.com>", "Subject": subject},
+    )
+
+
+def message_with_body(message_id: str, subject: str, body_text: str) -> MessageRecord:
+    return MessageRecord(
+        id=message_id,
+        thread_id=f"thread-{message_id}",
+        history_id="10",
+        internal_date="1710000000000",
+        label_ids=["INBOX", "Label_1"],
+        snippet="A useful local snippet.",
+        headers={
+            "From": "Sender <sender@example.com>",
+            "To": "User <user@example.com>",
+            "Subject": subject,
+            "Date": "Tue, 26 May 2026 10:00:00 -0600",
+            "Message-ID": "<msg-1@example.com>",
+        },
+        body_text=body_text,
     )
 
 
@@ -202,6 +222,85 @@ class CockpitTest(unittest.TestCase):
             "#trash/msg-1",
             payload["mailbox_actions"]["plans"][0]["gmail_url"],
         )
+
+    def test_build_message_detail_payload_combines_local_message_context(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Delivery update",
+                    "Package arrives Friday by 8 PM.",
+                )
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    machine_type="delivery",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            label_audit_events=[
+                LabelAuditEvent(
+                    message_id="msg-1",
+                    action="archive_after_digest",
+                    label_names=["INBOX"],
+                    label_ids=["INBOX"],
+                    reason="Archived after digest.",
+                    classifier_version="rules-v0",
+                    created_at="2026-05-26T00:00:00+00:00",
+                )
+            ],
+        )
+
+        payload = build_message_detail_payload(
+            state,
+            message_id="msg-1",
+            mailbox="inbox",
+        )
+
+        self.assertTrue(payload["read_only"])
+        self.assertEqual(payload["message"]["subject"], "Delivery update")
+        self.assertEqual(payload["message"]["body_text"], "Package arrives Friday by 8 PM.")
+        self.assertTrue(payload["message"]["has_body_text"])
+        self.assertEqual(payload["classification"]["machine_type"], "delivery")
+        self.assertEqual(payload["suggested_action"]["action"], "trash_after_digest")
+        self.assertTrue(payload["suggested_action"]["mutates_gmail"])
+        self.assertEqual(payload["audit"][0]["action"], "archive_after_digest")
+        self.assertIn("#inbox/msg-1", payload["message"]["gmail_url"])
+
+    def test_build_message_detail_payload_handles_unclassified_messages(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1", "Unclassified")})
+
+        payload = build_message_detail_payload(state, message_id="msg-1")
+
+        self.assertIsNone(payload["classification"])
+        self.assertIsNone(payload["suggested_action"])
+
+    def test_build_message_detail_payload_includes_correction_without_classification(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Corrected")},
+            corrections={
+                "msg-1": ClassificationCorrection(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="newsletter",
+                    reason="User correction.",
+                )
+            },
+        )
+
+        payload = build_message_detail_payload(state, message_id="msg-1")
+
+        self.assertIsNone(payload["classification"])
+        self.assertEqual(payload["correction"]["category"], "machine")
+        self.assertEqual(payload["correction"]["machine_type"], "newsletter")
+
+    def test_build_message_detail_payload_rejects_missing_messages(self) -> None:
+        with self.assertRaises(KeyError):
+            build_message_detail_payload(MailwyrmState(), message_id="missing")
 
     def test_build_daily_cockpit_payload_rejects_negative_limits(self) -> None:
         with self.assertRaises(ValueError):

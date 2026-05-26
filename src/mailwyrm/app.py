@@ -12,7 +12,11 @@ from urllib.parse import parse_qs, urlparse
 from mailwyrm.actions import build_action_plans, build_trash_preview, message_matches_mailbox
 from mailwyrm.actions import render_action_preview, render_trash_preview
 from mailwyrm.classifier import classify_message
-from mailwyrm.cockpit import SUPPORTED_MAILBOXES, build_daily_cockpit_payload
+from mailwyrm.cockpit import (
+    SUPPORTED_MAILBOXES,
+    build_daily_cockpit_payload,
+    build_message_detail_payload,
+)
 from mailwyrm.config import state_path
 from mailwyrm.daily import render_daily_preview
 from mailwyrm.labels import build_label_plans, render_label_preview
@@ -74,6 +78,9 @@ def _handler(*, mailbox: str, limit: int, audit_limit: int):
                 return
             if parsed_url.path == "/api/workflow-preview":
                 self._send_workflow_preview(parsed_url.query)
+                return
+            if parsed_url.path == "/api/message-detail":
+                self._send_message_detail(parsed_url.query)
                 return
             if parsed_url.path == "/healthz":
                 self._send_json({"ok": True})
@@ -164,6 +171,32 @@ def _handler(*, mailbox: str, limit: int, audit_limit: int):
                 return
             self._send_json(payload)
 
+        def _send_message_detail(self, query: str) -> None:
+            params = parse_qs(query)
+            try:
+                request_mailbox = _query_mailbox(params, mailbox)
+                message_id = _query_message_id(params)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            try:
+                payload = build_message_detail_payload(
+                    read_state(state_path()),
+                    message_id=message_id,
+                    mailbox=request_mailbox,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except KeyError:
+                self._send_json(
+                    {"error": "message is not in the local index"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            self._send_json(payload)
+
         def _send_static(self, request_path: str) -> None:
             relative_path = "index.html" if request_path in {"", "/"} else request_path[1:]
             relative_path = PurePosixPath(relative_path)
@@ -227,6 +260,13 @@ def _query_workflow(params: dict[str, list[str]]) -> str:
     value = params.get("workflow", [""])[0]
     if value not in SUPPORTED_PREVIEW_WORKFLOWS:
         raise ValueError("workflow must be one of daily-preview, labels, archive, or trash")
+    return value
+
+
+def _query_message_id(params: dict[str, list[str]]) -> str:
+    value = params.get("message_id", [""])[0].strip()
+    if not value:
+        raise ValueError("message_id is required")
     return value
 
 

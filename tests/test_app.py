@@ -7,6 +7,7 @@ from mailwyrm.app import (
     _is_app_mutation_request,
     _query_int,
     _query_mailbox,
+    _query_message_id,
     _query_workflow,
     build_workflow_preview_payload,
     classify_local_messages,
@@ -60,9 +61,15 @@ class AppTest(unittest.TestCase):
         self.assertIn("copy-command", static_root.joinpath("app.js").read_text())
         self.assertIn("workflow-status", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/workflow-preview", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/message-detail", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/local-classify", static_root.joinpath("app.js").read_text())
         self.assertIn('"X-Mailwyrm-App": "local-ui"', static_root.joinpath("app.js").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
+        self.assertIn("detail-panel", static_root.joinpath("index.html").read_text())
+        self.assertIn("view-detail", static_root.joinpath("app.js").read_text())
+        self.assertIn("correctionLine", static_root.joinpath("app.js").read_text())
+        self.assertIn("noopener noreferrer", static_root.joinpath("app.js").read_text())
+        self.assertIn("overflow: auto", static_root.joinpath("app.css").read_text())
         self.assertIn("run-local-action", static_root.joinpath("app.js").read_text())
         self.assertIn(
             "Local app view; Gmail mutations require CLI",
@@ -108,6 +115,12 @@ class AppTest(unittest.TestCase):
     def test_query_workflow_rejects_non_preview_workflows(self) -> None:
         with self.assertRaises(ValueError):
             _query_workflow({"workflow": ["sync"]})
+
+    def test_query_message_id_requires_value(self) -> None:
+        self.assertEqual(_query_message_id({"message_id": ["msg-1"]}), "msg-1")
+
+        with self.assertRaises(ValueError):
+            _query_message_id({})
 
     def test_build_workflow_preview_payload_renders_daily_preview(self) -> None:
         state = MailwyrmState(

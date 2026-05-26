@@ -17,6 +17,7 @@ The app exposes:
 
 - `/`: the dashboard UI.
 - `/api/daily-cockpit`: structured JSON for the same daily cockpit data.
+- `/api/message-detail`: read-only local message detail from indexed state.
 - `/api/workflow-preview`: read-only local reports for preview workflows.
 - `/api/local-classify`: local-only classification for indexed messages.
 - `/healthz`: a lightweight health check.
@@ -32,6 +33,7 @@ It shows:
 - Primary attention lanes for human correspondence and protected or uncertain messages.
 - Archive and trash policy state.
 - Machine digest items with Gmail links.
+- Local message detail for lane, digest, and action-preview items.
 - Mailbox action previews.
 - Policy-gated trash previews.
 - Recent Gmail mutation audit events.

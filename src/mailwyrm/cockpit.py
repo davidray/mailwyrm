@@ -111,6 +111,80 @@ def build_daily_cockpit_payload(
     }
 
 
+def build_message_detail_payload(
+    state: MailwyrmState,
+    *,
+    message_id: str,
+    mailbox: str = "inbox",
+) -> dict[str, Any]:
+    if mailbox not in SUPPORTED_MAILBOXES:
+        raise ValueError("mailbox must be one of inbox, all-mail, or trash")
+    message = state.messages.get(message_id)
+    if message is None:
+        raise KeyError(message_id)
+
+    classification = state.classifications.get(message.id)
+    correction = state.corrections.get(message.id)
+    effective = (
+        effective_classification(classification, correction)
+        if classification is not None
+        else None
+    )
+    plan = plan_action(message, effective) if effective is not None else None
+    audit_events = sorted(
+        (
+            event
+            for event in state.label_audit_events
+            if event.message_id == message.id
+        ),
+        key=lambda event: event.created_at,
+        reverse=True,
+    )
+
+    return {
+        "title": _header(message, "Subject", "(no subject)"),
+        "read_only": True,
+        "message": {
+            "message_id": message.id,
+            "thread_id": message.thread_id,
+            "gmail_url": _gmail_url(message.id, mailbox=mailbox),
+            "subject": _header(message, "Subject", "(no subject)"),
+            "sender": _header(message, "From", "(unknown sender)"),
+            "to": _header(message, "To", ""),
+            "date": _header(message, "Date", ""),
+            "message_id_header": _header(message, "Message-ID", ""),
+            "label_ids": list(message.label_ids),
+            "snippet": _clean_snippet(message.snippet),
+            "body_text": message.body_text,
+            "has_body_text": bool(message.body_text),
+        },
+        "classification": (
+            _classification_payload(effective)
+            if effective is not None
+            else None
+        ),
+        "correction": (
+            {
+                "category": correction.category,
+                "machine_type": correction.machine_type,
+                "reason": correction.reason,
+            }
+            if correction is not None
+            else None
+        ),
+        "suggested_action": (
+            {
+                "action": plan.action,
+                "reason": plan.reason,
+                "mutates_gmail": _action_mutates_gmail(plan.action),
+            }
+            if plan is not None
+            else None
+        ),
+        "audit": [_audit_event_payload(state, event) for event in audit_events],
+    }
+
+
 def _classification_counts(state: MailwyrmState) -> dict[str, int]:
     counts = {"human": 0, "machine": 0, "needs_review": 0}
     for message_id, classification in state.classifications.items():
@@ -133,6 +207,10 @@ def _action_counts(action_plans) -> dict[str, int]:
     for plan in action_plans:
         counts[plan.action] = counts.get(plan.action, 0) + 1
     return counts
+
+
+def _action_mutates_gmail(action: str) -> bool:
+    return action in {ACTION_ARCHIVE_AFTER_DIGEST, ACTION_TRASH_AFTER_DIGEST}
 
 
 def _workflow_controls(
@@ -391,6 +469,19 @@ def _action_plan_payload(plan, *, mailbox: str) -> dict[str, Any]:
         "confidence": plan.classification.confidence,
         "action": plan.action,
         "reason": plan.reason,
+    }
+
+
+def _classification_payload(classification) -> dict[str, Any]:
+    return {
+        "category": classification.category,
+        "machine_type": classification.machine_type,
+        "importance": classification.importance,
+        "automation_safety": classification.automation_safety,
+        "confidence": classification.confidence,
+        "reason": classification.reason,
+        "suggested_actions": list(classification.suggested_actions),
+        "classifier_version": classification.classifier_version,
     }
 
 

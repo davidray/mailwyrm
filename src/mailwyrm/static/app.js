@@ -27,6 +27,10 @@ const els = {
   previewTitle: document.querySelector("#preview-title"),
   previewReport: document.querySelector("#preview-report"),
   previewClose: document.querySelector("#preview-close"),
+  detailPanel: document.querySelector("#detail-panel"),
+  detailTitle: document.querySelector("#detail-title"),
+  detailContent: document.querySelector("#detail-content"),
+  detailClose: document.querySelector("#detail-close"),
   commands: document.querySelector("#commands"),
 };
 
@@ -37,6 +41,9 @@ els.mailbox.addEventListener("change", () => {
 els.refresh.addEventListener("click", loadCockpit);
 els.previewClose.addEventListener("click", () => {
   els.previewPanel.hidden = true;
+});
+els.detailClose.addEventListener("click", () => {
+  els.detailPanel.hidden = true;
 });
 
 loadCockpit();
@@ -134,6 +141,7 @@ function renderLane(target, counter, lane, options) {
       messageCard(item, {
         badge: item.action || options.label,
         showSnippet: true,
+        mailbox: state.mailbox,
       })
     )
   );
@@ -150,6 +158,7 @@ function renderDigest(digest) {
       messageCard(item, {
         badge: item.machine_type || item.category,
         showSnippet: true,
+        mailbox: "all-mail",
       })
     )
   );
@@ -190,6 +199,7 @@ function actionItem(plan) {
   return messageCard(plan, {
     badge: plan.action,
     showSnippet: false,
+    mailbox: state.mailbox,
   });
 }
 
@@ -197,7 +207,7 @@ function messageCard(item, options) {
   return div("article", { class: "item" }, [
     div("div", { class: "item-header" }, [
       div("div", {}, [
-        link(item.gmail_url, item.subject),
+        subjectButton(item, options.mailbox || state.mailbox),
         div("div", { class: "meta" }, item.sender),
       ]),
       pill(options.badge),
@@ -207,7 +217,151 @@ function messageCard(item, options) {
     options.showSnippet && item.snippet
       ? div("p", { class: "snippet" }, item.snippet)
       : "",
+    div("div", { class: "item-actions" }, [
+      detailButton(item, options.mailbox || state.mailbox),
+      link(item.gmail_url, "Open in Gmail", "secondary-link"),
+    ]),
   ]);
+}
+
+function subjectButton(item, mailbox) {
+  const button = div("button", { type: "button", class: "message-link" }, item.subject);
+  button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
+  return button;
+}
+
+function detailButton(item, mailbox) {
+  const button = div("button", { type: "button", class: "view-detail" }, "Details");
+  button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
+  return button;
+}
+
+async function loadMessageDetail(messageId, mailbox) {
+  const params = new URLSearchParams({
+    message_id: messageId,
+    mailbox,
+  });
+  try {
+    const response = await fetch(`/api/message-detail?${params}`);
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderDetailError(payload.error || "Unable to load message detail.");
+      return;
+    }
+    renderMessageDetail(payload);
+  } catch (error) {
+    renderDetailError(error.message || "Unable to load message detail.");
+  }
+}
+
+function renderMessageDetail(payload) {
+  const message = payload.message;
+  els.detailTitle.textContent = message.subject;
+  els.detailContent.replaceChildren(
+    div("div", { class: "detail-grid" }, [
+      detailField("From", message.sender),
+      detailField("To", message.to || "(not synced)"),
+      detailField("Date", message.date || "(not synced)"),
+      detailField("Thread", message.thread_id),
+      detailField(
+        "Gmail labels",
+        message.label_ids.length ? message.label_ids.join(", ") : "None"
+      ),
+      detailField("Message-ID", message.message_id_header || "(not synced)"),
+    ]),
+    detailSection("Classification", classificationLines(payload)),
+    detailSection("Suggested action", actionLines(payload)),
+    detailSection(
+      message.has_body_text ? "Stored body text" : "Snippet",
+      [message.has_body_text ? message.body_text : message.snippet || "(no local text)"],
+      { pre: true }
+    ),
+    auditSection(payload.audit),
+    div("div", { class: "detail-actions" }, [
+      link(message.gmail_url, "Open in Gmail", "secondary-link"),
+    ])
+  );
+  els.detailPanel.hidden = false;
+  els.detailPanel.scrollIntoView({ block: "start" });
+}
+
+function detailField(label, value) {
+  return div("div", { class: "detail-field" }, [
+    div("span", {}, label),
+    div("strong", {}, value),
+  ]);
+}
+
+function detailSection(title, lines, options = {}) {
+  const content = options.pre
+    ? div("pre", { class: "detail-body" }, lines.join("\n"))
+    : div(
+        "div",
+        { class: "detail-lines" },
+        lines.map((line) => div("p", {}, line))
+      );
+  return div("section", { class: "detail-section" }, [
+    div("h3", {}, title),
+    content,
+  ]);
+}
+
+function classificationLines(payload) {
+  const classification = payload.classification;
+  if (!classification) {
+    const lines = ["This message has not been classified locally."];
+    if (payload.correction) {
+      lines.push(correctionLine(payload.correction));
+    }
+    return lines;
+  }
+  const lines = [
+    `Category: ${classification.category}`,
+    `Machine type: ${classification.machine_type || "none"}`,
+    `Importance: ${classification.importance}`,
+    `Automation safety: ${classification.automation_safety}`,
+    `Confidence: ${formatConfidence(classification.confidence)}`,
+    `Reason: ${classification.reason}`,
+    `Suggested actions: ${classification.suggested_actions.join(", ") || "none"}`,
+    `Classifier: ${classification.classifier_version}`,
+  ];
+  if (payload.correction) {
+    lines.push(correctionLine(payload.correction));
+  }
+  return lines;
+}
+
+function correctionLine(correction) {
+  const machineType = correction.machine_type ? `, ${correction.machine_type}` : "";
+  return `Correction: ${correction.category}${machineType} (${correction.reason || "no reason"})`;
+}
+
+function actionLines(payload) {
+  if (!payload.suggested_action) {
+    return ["No action is available until the message is classified."];
+  }
+  return [
+    `Action: ${payload.suggested_action.action}`,
+    `Gmail mutation: ${payload.suggested_action.mutates_gmail ? "yes" : "no"}`,
+    `Reason: ${payload.suggested_action.reason}`,
+  ];
+}
+
+function auditSection(events) {
+  if (!events.length) {
+    return detailSection("Audit", ["No Gmail mutation audit events for this message."]);
+  }
+  return detailSection(
+    "Audit",
+    events.map((event) => `${event.created_at}: ${event.action} (${event.reason})`)
+  );
+}
+
+function renderDetailError(message) {
+  els.detailTitle.textContent = "Message detail error";
+  els.detailContent.replaceChildren(div("p", { class: "empty" }, message));
+  els.detailPanel.hidden = false;
+  els.detailPanel.scrollIntoView({ block: "start" });
 }
 
 function metaLine(item) {
@@ -458,11 +612,14 @@ function pill(text) {
   return div("span", { class: `pill ${text}` }, text.replaceAll("_", " "));
 }
 
-function link(href, text) {
+function link(href, text, className = "") {
   const a = document.createElement("a");
   a.href = href;
   a.target = "_blank";
-  a.rel = "noreferrer";
+  a.rel = "noopener noreferrer";
+  if (className) {
+    a.className = className;
+  }
   a.textContent = text;
   return a;
 }
