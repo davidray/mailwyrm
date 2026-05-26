@@ -1,5 +1,31 @@
 # Daily Workflow
 
+`mailwyrm daily cockpit` renders the first UX-facing daily attention cockpit.
+
+It is read-only. It does not call Gmail, mutate local state, mark messages as digested, apply labels, archive messages, or trash messages.
+
+The cockpit combines:
+
+- Account and sync state.
+- Attention counts for human, machine, and needs-review mail.
+- Current archive and trash policy state.
+- The local machine-mail digest.
+- Mailbox action preview for the selected mailbox scope.
+- Policy-gated trash preview.
+- Recent Gmail mutation audit rows.
+- Useful next commands.
+
+Example:
+
+```sh
+uv run mailwyrm daily cockpit
+uv run mailwyrm daily cockpit --mailbox all-mail --limit 100 --audit-limit 25
+```
+
+The `--limit` option caps both digest items and mailbox action rows so the cockpit remains scannable.
+
+## Preview
+
 `mailwyrm daily preview` renders the first single-report daily machine-mail workflow.
 
 It is intentionally preview-only. It does not mark messages as digested, apply Gmail labels, archive messages, trash messages, or write local audit events.
@@ -30,7 +56,7 @@ Archive apply remains gated to messages that have already appeared in a digest. 
 3. Apply the Gmail-visible `Mailwyrm/Digested` label.
 4. Archive eligible `archive_after_digest` messages by removing Gmail's `INBOX` label.
 
-It does not apply `trash_after_digest`. Trash remains a future explicit-policy step.
+It does not apply `trash_after_digest`. Trash remains a separate explicit-policy step through `mailwyrm actions apply-trash`.
 
 Example:
 

@@ -22,7 +22,7 @@ from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
 from mailwyrm.corrections import effective_classification
-from mailwyrm.daily import render_daily_preview, render_daily_status
+from mailwyrm.daily import render_daily_cockpit, render_daily_preview, render_daily_status
 from mailwyrm.digest import mark_digest_items, render_digest
 from mailwyrm.gmail import GmailClient
 from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
@@ -185,6 +185,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Preview or apply the daily machine-mail workflow.",
     )
     daily_subparsers = daily_parser.add_subparsers(dest="daily_command")
+    daily_cockpit_parser = daily_subparsers.add_parser(
+        "cockpit",
+        help="Render a read-only daily attention cockpit.",
+    )
+    daily_cockpit_parser.add_argument(
+        "--limit",
+        default=25,
+        type=int,
+        help="Max digest items and action plans to show. Defaults to 25.",
+    )
+    daily_cockpit_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope for mailbox actions. Defaults to inbox.",
+    )
+    daily_cockpit_parser.add_argument(
+        "--audit-limit",
+        default=10,
+        type=int,
+        help="Max recent audit events to show. Defaults to 10.",
+    )
     daily_preview_parser = daily_subparsers.add_parser(
         "preview",
         help="Render digest, digested-label, and mailbox-action previews together.",
@@ -641,6 +663,8 @@ def digest_labels_apply_command(client_secret: Path, limit: int | None) -> int:
 
 
 def daily_command(args: argparse.Namespace) -> int:
+    if args.daily_command == "cockpit":
+        return daily_cockpit_command(args.limit, args.mailbox, args.audit_limit)
     if args.daily_command == "preview":
         return daily_preview_command(args.limit, args.mailbox)
     if args.daily_command == "apply":
@@ -648,8 +672,23 @@ def daily_command(args: argparse.Namespace) -> int:
     if args.daily_command == "status":
         return daily_status_command(args.mailbox)
 
-    print("Choose `preview`, `apply`, or `status`.", file=sys.stderr)
+    print("Choose `cockpit`, `preview`, `apply`, or `status`.", file=sys.stderr)
     return 1
+
+
+def daily_cockpit_command(limit: int | None, mailbox: str, audit_limit: int) -> int:
+    state = read_state(state_path())
+    title_date = datetime.now(UTC).date().isoformat()
+    print(
+        render_daily_cockpit(
+            state,
+            title_date=title_date,
+            limit=limit,
+            mailbox=mailbox,
+            audit_limit=audit_limit,
+        )
+    )
+    return 0
 
 
 def daily_preview_command(limit: int | None, mailbox: str) -> int:

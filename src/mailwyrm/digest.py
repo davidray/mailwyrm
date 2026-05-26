@@ -26,9 +26,16 @@ class DigestItem:
     classification: ClassificationRecord
 
 
-def render_digest(state: MailwyrmState, *, title_date: str | None = None) -> str:
+def render_digest(
+    state: MailwyrmState,
+    *,
+    title_date: str | None = None,
+    limit: int | None = None,
+) -> str:
     title_date = title_date or datetime.now(UTC).date().isoformat()
     items = _digest_items(state)
+    if limit is not None:
+        items = items[:limit]
     lines = [
         f"# Mailwyrm Machine Digest - {title_date}",
         "",

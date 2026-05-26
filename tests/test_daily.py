@@ -1,6 +1,10 @@
 import unittest
 
-from mailwyrm.daily import render_daily_preview, render_daily_status
+from mailwyrm.daily import (
+    render_daily_cockpit,
+    render_daily_preview,
+    render_daily_status,
+)
 from mailwyrm.models import (
     ClassificationRecord,
     DigestAuditEvent,
@@ -52,6 +56,57 @@ def digest_event(message_id: str) -> DigestAuditEvent:
 
 
 class DailyPreviewTest(unittest.TestCase):
+    def test_daily_cockpit_combines_status_digest_actions_and_audit(self) -> None:
+        state = MailwyrmState(
+            account_email="user@example.com",
+            last_sync_mailbox="inbox",
+            messages={
+                "msg-1": message("msg-1", "Receipt"),
+                "msg-2": message("msg-2", "Shipping"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            label_audit_events=[
+                label_event(
+                    "msg-1",
+                    action="archive_after_digest",
+                    label_names=["INBOX"],
+                )
+            ],
+        )
+
+        cockpit = render_daily_cockpit(
+            state,
+            title_date="2026-05-25",
+            limit=1,
+            mailbox="inbox",
+            audit_limit=5,
+        )
+
+        self.assertIn("# Mailwyrm Daily Cockpit - 2026-05-25", cockpit)
+        self.assertIn("Read-only local view.", cockpit)
+        self.assertIn("## Account", cockpit)
+        self.assertIn("Account: user@example.com", cockpit)
+        self.assertIn("## Attention", cockpit)
+        self.assertIn("Machine: 2", cockpit)
+        self.assertIn("## Policy", cockpit)
+        self.assertIn("Archive after digest: enabled", cockpit)
+        self.assertIn("## Machine Digest", cockpit)
+        self.assertIn("# Mailwyrm Machine Digest - 2026-05-25", cockpit)
+        self.assertIn("Receipt", cockpit)
+        self.assertNotIn("Shipping", cockpit)
+        self.assertIn("## Mailbox Actions", cockpit)
+        self.assertIn("Mailbox scope: inbox", cockpit)
+        self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.86\tReceipt", cockpit)
+        self.assertIn("## Trash Gate", cockpit)
+        self.assertIn("Mailbox Trash Preview", cockpit)
+        self.assertIn("## Recent Gmail Audit", cockpit)
+        self.assertIn("Mailbox Action Audit", cockpit)
+        self.assertIn("## Useful Commands", cockpit)
+
     def test_daily_preview_combines_digest_labels_and_actions(self) -> None:
         state = MailwyrmState(
             account_email="user@example.com",
