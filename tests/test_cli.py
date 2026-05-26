@@ -18,6 +18,7 @@ from mailwyrm.cli import (
     ensure_labels_command,
     labels_apply_command,
     policy_command,
+    policy_enable_trash_after_digest_command,
 )
 from mailwyrm.models import (
     GMAIL_MODIFY_SCOPE,
@@ -61,6 +62,29 @@ class CliTest(unittest.TestCase):
         self.assertIn("# Mailwyrm Policy Status", stdout.getvalue())
         self.assertIn("Archive after digest: enabled", stdout.getvalue())
         self.assertIn("Trash after digest: disabled", stdout.getvalue())
+
+    def test_enable_trash_policy_requires_confirmation(self) -> None:
+        with patch.object(sys, "stderr", StringIO()) as stderr:
+            result = policy_enable_trash_after_digest_command(False)
+
+        self.assertEqual(result, 1)
+        self.assertIn("--confirm-trash-policy", stderr.getvalue())
+
+    def test_enable_trash_policy_updates_local_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                state_path = Path(temp_dir) / "state.json"
+                write_state(state_path, MailwyrmState())
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = policy_enable_trash_after_digest_command(True)
+                from mailwyrm.store import read_state
+
+                loaded = read_state(state_path)
+
+        self.assertEqual(result, 0)
+        self.assertTrue(loaded.automation_policy.trash_after_digest_enabled)
+        self.assertIn("Trash after digest: enabled", stdout.getvalue())
 
     def test_labels_apply_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

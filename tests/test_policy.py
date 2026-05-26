@@ -1,7 +1,7 @@
 import unittest
 
 from mailwyrm.models import AutomationPolicy
-from mailwyrm.policy import render_policy_status
+from mailwyrm.policy import enable_trash_after_digest, render_policy_status
 
 
 class PolicyTest(unittest.TestCase):
@@ -20,6 +20,14 @@ class PolicyTest(unittest.TestCase):
 
         self.assertIn("Trash after digest: enabled", status)
         self.assertIn("Trash automation is enabled in local policy.", status)
+
+    def test_enable_trash_after_digest_updates_only_trash_policy(self) -> None:
+        policy = AutomationPolicy(archive_after_digest_enabled=False)
+
+        updated = enable_trash_after_digest(policy)
+
+        self.assertFalse(updated.archive_after_digest_enabled)
+        self.assertTrue(updated.trash_after_digest_enabled)
 
     def test_policy_parses_hand_edited_false_string(self) -> None:
         policy = AutomationPolicy.from_dict(

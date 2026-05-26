@@ -39,7 +39,7 @@ from mailwyrm.oauth import (
     scope_for_name,
     token_is_expired,
 )
-from mailwyrm.policy import render_policy_status
+from mailwyrm.policy import enable_trash_after_digest, render_policy_status
 from mailwyrm.store import read_state, read_token, write_state, write_token
 from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
 
@@ -266,6 +266,15 @@ def build_parser() -> argparse.ArgumentParser:
     policy_subparsers.add_parser(
         "status",
         help="Show local automation policy without mutating Gmail or local state.",
+    )
+    policy_enable_trash_parser = policy_subparsers.add_parser(
+        "enable-trash-after-digest",
+        help="Enable local trash-after-digest policy without mutating Gmail.",
+    )
+    policy_enable_trash_parser.add_argument(
+        "--confirm-trash-policy",
+        action="store_true",
+        help="Required confirmation that future trash commands may use this policy.",
     )
 
     list_parser = subparsers.add_parser(
@@ -685,9 +694,27 @@ def policy_command(args: argparse.Namespace) -> int:
         state = read_state(state_path())
         print(render_policy_status(state.automation_policy))
         return 0
+    if args.policy_command == "enable-trash-after-digest":
+        return policy_enable_trash_after_digest_command(args.confirm_trash_policy)
 
-    print("Choose `status`.", file=sys.stderr)
+    print("Choose `status` or `enable-trash-after-digest`.", file=sys.stderr)
     return 1
+
+
+def policy_enable_trash_after_digest_command(confirm_trash_policy: bool) -> int:
+    if not confirm_trash_policy:
+        print(
+            "Refusing to enable trash-after-digest policy without "
+            "`--confirm-trash-policy`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    state = read_state(state_path())
+    state.automation_policy = enable_trash_after_digest(state.automation_policy)
+    write_state(state_path(), state)
+    print(render_policy_status(state.automation_policy))
+    return 0
 
 
 def labels_command(args: argparse.Namespace) -> int:
