@@ -35,8 +35,11 @@ class GmailClient:
         *,
         max_results: int = 25,
         label_ids: tuple[str, ...] | None = ("INBOX",),
+        include_spam_trash: bool = False,
     ) -> list[dict[str, Any]]:
         query: dict[str, str | int] = {"maxResults": max_results}
+        if include_spam_trash:
+            query["includeSpamTrash"] = "true"
         url = f"{GMAIL_API_BASE}/users/me/messages?{urllib.parse.urlencode(query)}"
         if label_ids:
             label_query = "&".join(
@@ -92,20 +95,31 @@ class GmailClient:
         return ensured
 
     def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
-        self._post(
-            f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
-            {
-                "addLabelIds": label_ids,
-                "removeLabelIds": [],
-            },
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=label_ids,
+            remove_label_ids=[],
         )
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=[],
+            remove_label_ids=label_ids,
+        )
+
+    def modify_message_labels(
+        self,
+        message_id: str,
+        *,
+        add_label_ids: list[str],
+        remove_label_ids: list[str],
+    ) -> None:
         self._post(
             f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
             {
-                "addLabelIds": [],
-                "removeLabelIds": label_ids,
+                "addLabelIds": add_label_ids,
+                "removeLabelIds": remove_label_ids,
             },
         )
 

@@ -11,6 +11,7 @@ from mailwyrm.cli import (
     actions_apply_archive_command,
     actions_command,
     actions_restore_archive_command,
+    actions_restore_trash_command,
     daily_apply_command,
     daily_command,
     daily_status_command,
@@ -18,6 +19,8 @@ from mailwyrm.cli import (
     digest_labels_apply_command,
     ensure_labels_command,
     labels_apply_command,
+    list_command,
+    message_matches_mailbox,
     policy_command,
     policy_enable_trash_after_digest_command,
 )
@@ -146,6 +149,73 @@ class CliTest(unittest.TestCase):
         self.assertIn("Mailbox Trash Preview", stdout.getvalue())
         self.assertIn("Trash policy: enabled", stdout.getvalue())
         self.assertIn("msg-1\ttrash_after_digest\tmachine\t0.94\tPromo", stdout.getvalue())
+
+    def test_list_command_filters_by_trash_mailbox(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["TRASH"],
+                                snippet="Snippet",
+                                headers={
+                                    "From": "sender@example.com",
+                                    "Subject": "Trashed",
+                                },
+                            ),
+                            "msg-2": MessageRecord(
+                                id="msg-2",
+                                thread_id="thread-2",
+                                history_id="11",
+                                internal_date="1710000000001",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={
+                                    "From": "sender@example.com",
+                                    "Subject": "Inbox",
+                                },
+                            ),
+                        },
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = list_command(25, False, "trash")
+
+        self.assertEqual(result, 0)
+        self.assertIn("msg-1\tsender@example.com\tTrashed", stdout.getvalue())
+        self.assertNotIn("msg-2", stdout.getvalue())
+
+    def test_message_matches_mailbox(self) -> None:
+        inbox_message = MessageRecord(
+            id="msg-1",
+            thread_id="thread-1",
+            history_id="10",
+            internal_date="1710000000000",
+            label_ids=["INBOX"],
+            snippet="Snippet",
+            headers={},
+        )
+        trash_message = MessageRecord(
+            id="msg-2",
+            thread_id="thread-2",
+            history_id="11",
+            internal_date="1710000000001",
+            label_ids=["TRASH"],
+            snippet="Snippet",
+            headers={},
+        )
+
+        self.assertTrue(message_matches_mailbox(inbox_message, "inbox"))
+        self.assertTrue(message_matches_mailbox(inbox_message, "all-mail"))
+        self.assertFalse(message_matches_mailbox(inbox_message, "trash"))
+        self.assertTrue(message_matches_mailbox(trash_message, "trash"))
 
     def test_labels_apply_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -703,6 +773,111 @@ class CliTest(unittest.TestCase):
                 with patch("mailwyrm.cli.GmailClient"):
                     with patch.object(sys, "stderr", StringIO()) as stderr:
                         result = actions_restore_archive_command(
+                            Path("client_secret.json"),
+                            "missing",
+                        )
+
+        self.assertEqual(result, 1)
+        self.assertIn("not in the local index", stderr.getvalue())
+
+    def test_actions_restore_trash_restores_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["TRASH"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                    ),
+                )
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch("mailwyrm.cli.restore_trashed_message", return_value=True):
+                        with patch.object(sys, "stdout", StringIO()) as stdout:
+                            result = actions_restore_trash_command(
+                                Path("client_secret.json"),
+                                "msg-1",
+                            )
+
+        self.assertEqual(result, 0)
+        self.assertIn(
+            "Restored msg-1 from trash to inbox by removing Gmail's TRASH label "
+            "and adding INBOX.",
+            stdout.getvalue(),
+        )
+
+    def test_actions_restore_trash_reports_non_trashed_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                    ),
+                )
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch("mailwyrm.cli.restore_trashed_message", return_value=False):
+                        with patch.object(sys, "stdout", StringIO()) as stdout:
+                            result = actions_restore_trash_command(
+                                Path("client_secret.json"),
+                                "msg-1",
+                            )
+
+        self.assertEqual(result, 0)
+        self.assertIn("Message msg-1 is not in trash.", stdout.getvalue())
+
+    def test_actions_restore_trash_reports_unknown_message(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(Path(temp_dir) / "state.json", MailwyrmState())
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    with patch.object(sys, "stderr", StringIO()) as stderr:
+                        result = actions_restore_trash_command(
                             Path("client_secret.json"),
                             "missing",
                         )

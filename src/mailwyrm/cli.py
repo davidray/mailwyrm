@@ -14,6 +14,7 @@ from mailwyrm.actions import (
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
+    restore_trashed_message,
 )
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
@@ -46,7 +47,7 @@ from mailwyrm.store import read_state, read_token, write_state, write_token
 from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
 
 
-SYNC_MAILBOXES = ("inbox", "all-mail")
+SYNC_MAILBOXES = ("inbox", "all-mail", "trash")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "policy":
         return policy_command(args)
     if args.command == "list":
-        return list_command(args.limit, args.show_classification)
+        return list_command(args.limit, args.show_classification, args.mailbox)
     if args.command == "labels":
         return labels_command(args)
     if args.command == "actions":
@@ -285,6 +286,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     list_parser.add_argument("--limit", default=25, type=int, help="Max messages to show.")
     list_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="all-mail",
+        help="Mailbox scope to list from the local index. Defaults to all-mail.",
+    )
+    list_parser.add_argument(
         "--show-classification",
         action="store_true",
         help="Include local classification category and reason.",
@@ -407,6 +414,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Path to a Google OAuth client secret JSON file for token refresh.",
     )
+    actions_restore_trash_parser = actions_subparsers.add_parser(
+        "restore-trash",
+        help="Restore a trashed message by removing TRASH and adding INBOX.",
+    )
+    actions_restore_trash_parser.add_argument(
+        "message_id",
+        help="Gmail message ID to restore to the inbox.",
+    )
+    actions_restore_trash_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
 
     return parser
 
@@ -438,6 +459,7 @@ def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
     message_refs = client.list_messages(
         max_results=limit,
         label_ids=label_ids_for_mailbox(mailbox),
+        include_spam_trash=include_spam_trash_for_mailbox(mailbox),
     )
     stats = SyncStats()
     for message_ref in message_refs:
@@ -454,7 +476,13 @@ def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
 def label_ids_for_mailbox(mailbox: str) -> tuple[str, ...] | None:
     if mailbox == "all-mail":
         return None
+    if mailbox == "trash":
+        return ("TRASH",)
     return ("INBOX",)
+
+
+def include_spam_trash_for_mailbox(mailbox: str) -> bool:
+    return mailbox == "trash"
 
 
 def ensure_labels_command(client_secret: Path) -> int:
@@ -801,9 +829,12 @@ def actions_command(args: argparse.Namespace) -> int:
         )
     if args.actions_command == "restore-archive":
         return actions_restore_archive_command(args.client_secret, args.message_id)
+    if args.actions_command == "restore-trash":
+        return actions_restore_trash_command(args.client_secret, args.message_id)
 
     print(
-        "Choose `preview`, `preview-trash`, `apply-archive`, or `restore-archive`.",
+        "Choose `preview`, `preview-trash`, `apply-archive`, "
+        "`restore-archive`, or `restore-trash`.",
         file=sys.stderr,
     )
     return 1
@@ -888,15 +919,60 @@ def actions_restore_archive_command(client_secret: Path, message_id: str) -> int
     return 0
 
 
-def list_command(limit: int, show_classification: bool) -> int:
+def actions_restore_trash_command(client_secret: Path, message_id: str) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
     state = read_state(state_path())
-    messages = sorted(
-        state.messages.values(),
-        key=lambda message: message.internal_date or "",
-        reverse=True,
-    )
+    client = GmailClient(token)
+    try:
+        restored = restore_trashed_message(client, state, message_id)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    write_state(state_path(), state)
+    if restored:
+        print(
+            f"Restored {message_id} from trash to inbox by removing Gmail's "
+            "TRASH label and adding INBOX."
+        )
+    else:
+        print(f"Message {message_id} is not in trash.")
+    return 0
+
+
+def list_command(limit: int, show_classification: bool, mailbox: str) -> int:
+    state = read_state(state_path())
+    messages = [
+        message
+        for message in sorted(
+            state.messages.values(),
+            key=lambda message: message.internal_date or "",
+            reverse=True,
+        )
+        if message_matches_mailbox(message, mailbox)
+    ]
     if not messages:
-        print("No local messages. Run `mailwyrm sync` first.")
+        print(
+            f"No local {mailbox} messages. Run `mailwyrm sync --mailbox {mailbox}` first."
+        )
         return 0
 
     for message in messages[:limit]:
@@ -915,3 +991,12 @@ def list_command(limit: int, show_classification: bool) -> int:
                 fields.extend(["unclassified", ""])
         print("\t".join(fields))
     return 0
+
+
+def message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
+    if mailbox == "all-mail":
+        return True
+    label_ids = set(message.label_ids)
+    if mailbox == "trash":
+        return "TRASH" in label_ids
+    return "INBOX" in label_ids

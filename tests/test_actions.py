@@ -6,6 +6,7 @@ from mailwyrm.actions import (
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_RESTORE_ARCHIVE,
+    ACTION_RESTORE_TRASH,
     ACTION_TRASH_AFTER_DIGEST,
     apply_archive_action_plans,
     build_action_plans,
@@ -14,6 +15,7 @@ from mailwyrm.actions import (
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
+    restore_trashed_message,
 )
 from mailwyrm.models import (
     AutomationPolicy,
@@ -416,17 +418,87 @@ class ActionsTest(unittest.TestCase):
 
         self.assertEqual(client.added, [])
 
+    def test_restore_trashed_message_removes_trash_adds_inbox_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["TRASH", "Label_1"])},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        client = FakeGmailClient()
+
+        restored = restore_trashed_message(client, state, "msg-1")
+
+        self.assertTrue(restored)
+        self.assertEqual(client.modified, [("msg-1", ["INBOX"], ["TRASH"])])
+        self.assertEqual(client.removed, [])
+        self.assertEqual(client.added, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1", "INBOX"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_RESTORE_TRASH)
+        self.assertEqual(state.label_audit_events[0].label_ids, ["TRASH", "INBOX"])
+        self.assertEqual(
+            state.label_audit_events[0].reason,
+            "User restored trashed message to inbox.",
+        )
+        self.assertEqual(state.label_audit_events[0].classifier_version, "rules-v0")
+
+    def test_restore_trashed_message_does_not_duplicate_inbox(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["TRASH", "INBOX"])},
+        )
+        client = FakeGmailClient()
+
+        restored = restore_trashed_message(client, state, "msg-1")
+
+        self.assertTrue(restored)
+        self.assertEqual(client.modified, [("msg-1", [], ["TRASH"])])
+        self.assertEqual(client.removed, [])
+        self.assertEqual(client.added, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events[0].classifier_version, "manual")
+
+    def test_restore_trashed_message_skips_non_trashed_messages(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1", label_ids=["INBOX"])})
+        client = FakeGmailClient()
+
+        restored = restore_trashed_message(client, state, "msg-1")
+
+        self.assertFalse(restored)
+        self.assertEqual(client.removed, [])
+        self.assertEqual(client.added, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_restore_trashed_message_rejects_unknown_message(self) -> None:
+        state = MailwyrmState()
+        client = FakeGmailClient()
+
+        with self.assertRaisesRegex(ValueError, "not in the local index"):
+            restore_trashed_message(client, state, "msg-1")
+
+        self.assertEqual(client.removed, [])
+        self.assertEqual(client.added, [])
+        self.assertEqual(client.modified, [])
+
 
 class FakeGmailClient:
     def __init__(self) -> None:
         self.added: list[tuple[str, list[str]]] = []
         self.removed: list[tuple[str, list[str]]] = []
+        self.modified: list[tuple[str, list[str], list[str]]] = []
 
     def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
         self.added.append((message_id, label_ids))
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
         self.removed.append((message_id, label_ids))
+
+    def modify_message_labels(
+        self,
+        message_id: str,
+        *,
+        add_label_ids: list[str],
+        remove_label_ids: list[str],
+    ) -> None:
+        self.modified.append((message_id, add_label_ids, remove_label_ids))
 
 
 def digest_event(message_id: str, classifier_version: str = "rules-v0"):

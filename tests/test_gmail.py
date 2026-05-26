@@ -89,6 +89,32 @@ class GmailClientTest(unittest.TestCase):
         self.assertEqual(calls[0][1]["addLabelIds"], [])
         self.assertEqual(calls[0][1]["removeLabelIds"], ["INBOX"])
 
+    def test_modify_message_labels_posts_add_and_remove_payload(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.modify",
+            )
+        )
+        calls = []
+
+        def fake_post(path, body):
+            calls.append((path, body))
+            return {}
+
+        client._post = fake_post
+
+        client.modify_message_labels(
+            "msg 1/part",
+            add_label_ids=["INBOX"],
+            remove_label_ids=["TRASH"],
+        )
+
+        self.assertEqual(calls[0][0], "/users/me/messages/msg%201%2Fpart/modify")
+        self.assertEqual(calls[0][1]["addLabelIds"], ["INBOX"])
+        self.assertEqual(calls[0][1]["removeLabelIds"], ["TRASH"])
+
     def test_list_messages_omits_label_filter_when_label_ids_is_none(self) -> None:
         client = GmailClient(
             GmailToken(
@@ -129,6 +155,31 @@ class GmailClientTest(unittest.TestCase):
         client.list_messages(max_results=10)
 
         self.assertIn("labelIds=INBOX", urls[0])
+
+    def test_list_messages_can_include_spam_and_trash(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            return {"messages": []}
+
+        client._request = fake_request
+
+        client.list_messages(
+            max_results=10,
+            label_ids=("TRASH",),
+            include_spam_trash=True,
+        )
+
+        self.assertIn("includeSpamTrash=true", urls[0])
+        self.assertIn("labelIds=TRASH", urls[0])
 
 
 if __name__ == "__main__":
