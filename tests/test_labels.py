@@ -38,6 +38,18 @@ def archived_message(message_id: str = "msg-2") -> MessageRecord:
     )
 
 
+def trashed_message(message_id: str = "msg-3") -> MessageRecord:
+    return MessageRecord(
+        id=message_id,
+        thread_id="thread-3",
+        history_id="12",
+        internal_date="1710000000002",
+        label_ids=["TRASH"],
+        snippet="Snippet",
+        headers={"Subject": "Trashed"},
+    )
+
+
 def classification(
     message_id: str = "msg-1",
     *,
@@ -175,6 +187,24 @@ class LabelsTest(unittest.TestCase):
         plans = build_label_plans(state, mailbox="all-mail")
 
         self.assertEqual([plan.message.id for plan in plans], ["msg-2", "msg-1"])
+
+    def test_build_label_plans_trash_scope_includes_only_trashed_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1"),
+                "msg-2": archived_message("msg-2"),
+                "msg-3": trashed_message("msg-3"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+                "msg-3": classification("msg-3"),
+            },
+        )
+
+        plans = build_label_plans(state, mailbox="trash")
+
+        self.assertEqual([plan.message.id for plan in plans], ["msg-3"])
 
     def test_build_label_plans_respects_zero_limit(self) -> None:
         state = MailwyrmState(

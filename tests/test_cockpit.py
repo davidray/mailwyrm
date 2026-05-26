@@ -56,6 +56,18 @@ class CockpitTest(unittest.TestCase):
                 "msg-2": message("msg-2", "Copilot"),
                 "msg-3": message("msg-3", "Dinner"),
                 "msg-4": message("msg-4", "Security alert"),
+                "msg-5": MessageRecord(
+                    id="msg-5",
+                    thread_id="thread-msg-5",
+                    history_id="10",
+                    internal_date="1710000000001",
+                    label_ids=["INBOX"],
+                    snippet="A useful local snippet.",
+                    headers={
+                        "From": "Sender <sender@example.com>",
+                        "Subject": "Unclassified",
+                    },
+                ),
             },
             classifications={
                 "msg-1": classification("msg-1"),
@@ -154,6 +166,12 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["workflows"][-1]["status"], "Policy enabled")
         self.assertEqual(payload["workflows"][-1]["count"], 1)
         self.assertTrue(payload["workflows"][-1]["mutates_gmail"])
+        classify_workflow = payload["workflows"][1]
+        self.assertEqual(classify_workflow["count"], 1)
+        self.assertIn(
+            "classify --mailbox inbox --limit 1",
+            classify_workflow["primary_command"],
+        )
 
     def test_build_daily_cockpit_payload_uses_trash_gmail_links_for_trash_scope(self) -> None:
         state = MailwyrmState(

@@ -95,6 +95,7 @@ def build_daily_cockpit_payload(
             "events": [_audit_event_payload(state, event) for event in visible_audit_events],
         },
         "workflows": _workflow_controls(
+            state=state,
             mailbox=mailbox,
             limit=limit,
             action_plans=action_plans,
@@ -136,6 +137,7 @@ def _action_counts(action_plans) -> dict[str, int]:
 
 def _workflow_controls(
     *,
+    state: MailwyrmState,
     mailbox: str,
     limit: int | None,
     action_plans,
@@ -148,6 +150,7 @@ def _workflow_controls(
     archive_count = action_counts[ACTION_ARCHIVE_AFTER_DIGEST]
     trash_count = len(trash_preview.plans)
     label_count = len(action_plans)
+    classify_count = _unclassified_message_count(state, mailbox=mailbox, limit=limit)
 
     return [
         {
@@ -169,10 +172,10 @@ def _workflow_controls(
             "title": "Classify local mail",
             "phase": "AI",
             "status": "Local only",
-            "count": label_count,
+            "count": classify_count,
             "mutates_gmail": False,
             "description": "Classify indexed messages before label or action previews.",
-            "primary_command": f"uv run mailwyrm classify{limit_arg}",
+            "primary_command": f"uv run mailwyrm classify{mailbox_arg}{limit_arg}",
         },
         {
             "id": "daily-preview",
@@ -246,6 +249,29 @@ def _workflow_controls(
             ),
         },
     ]
+
+
+def _unclassified_message_count(
+    state: MailwyrmState,
+    *,
+    mailbox: str,
+    limit: int | None,
+) -> int:
+    count = 0
+    selected = 0
+    for message in sorted(
+        state.messages.values(),
+        key=lambda record: record.internal_date or "",
+        reverse=True,
+    ):
+        if not message_matches_mailbox(message, mailbox):
+            continue
+        selected += 1
+        if message.id not in state.classifications:
+            count += 1
+        if limit is not None and selected >= limit:
+            break
+    return count
 
 
 def _attention_lanes(

@@ -252,7 +252,7 @@ function renderWorkflows(workflows) {
 function workflowCard(workflow) {
   const command = workflow.primary_command;
   const previewCommand = workflow.preview_command;
-  const countText = workflow.count === null ? workflow.status : `${workflow.count} candidates`;
+  const countText = workflow.count === null ? "" : `${workflow.count} candidates`;
   const commands = [];
   if (previewCommand) {
     commands.push(commandRow("Preview", previewCommand));
@@ -262,7 +262,10 @@ function workflowCard(workflow) {
   return div("article", { class: `workflow ${workflow.id}` }, [
     div("div", { class: "workflow-topline" }, [
       pill(workflow.phase),
-      div("span", { class: "workflow-count" }, countText),
+      div("div", { class: "workflow-state" }, [
+        div("span", { class: "workflow-status" }, workflow.status),
+        countText ? div("span", { class: "workflow-count" }, countText) : "",
+      ]),
     ]),
     div("h3", {}, workflow.title),
     div("p", { class: "meta" }, workflow.description),

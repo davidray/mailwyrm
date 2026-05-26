@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "ensure-labels":
         return ensure_labels_command(args.client_secret)
     if args.command == "classify":
-        return classify_command(args.limit)
+        return classify_command(args.limit, args.mailbox)
     if args.command == "digest":
         return digest_command(args)
     if args.command == "daily":
@@ -140,6 +140,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         type=int,
         help="Max messages to classify. Defaults to all locally indexed messages.",
+    )
+    classify_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="all-mail",
+        help="Mailbox scope to classify. Defaults to all-mail.",
     )
 
     digest_parser = subparsers.add_parser(
@@ -621,15 +627,22 @@ def ensure_labels_command(client_secret: Path) -> int:
     return 0
 
 
-def classify_command(limit: int | None) -> int:
+def classify_command(limit: int | None, mailbox: str = "all-mail") -> int:
     state = read_state(state_path())
     messages = sorted(
-        state.messages.values(),
+        (
+            message
+            for message in state.messages.values()
+            if message_matches_mailbox(message, mailbox)
+        ),
         key=lambda message: message.internal_date or "",
         reverse=True,
     )
     if not messages:
-        print("No local messages. Run `mailwyrm sync` first.", file=sys.stderr)
+        print(
+            f"No local {mailbox} messages. Run `mailwyrm sync` first.",
+            file=sys.stderr,
+        )
         return 1
 
     selected_messages = messages[:limit] if limit is not None else messages
@@ -638,7 +651,7 @@ def classify_command(limit: int | None) -> int:
         state.classifications[message.id] = classification
 
     write_state(state_path(), state)
-    print(f"Classified {len(selected_messages)} message(s) locally.")
+    print(f"Classified {len(selected_messages)} {mailbox} message(s) locally.")
     return 0
 
 

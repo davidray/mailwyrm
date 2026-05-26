@@ -318,7 +318,16 @@ th {
   justify-content: space-between;
 }
 
+.workflow-state {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  text-align: right;
+}
+
 .workflow-count,
+.workflow-status,
 .command-label {
   color: var(--muted);
   font-size: 0.78rem;

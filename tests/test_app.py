@@ -15,6 +15,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("workflows", static_root.joinpath("index.html").read_text())
         self.assertIn("/api/daily-cockpit", static_root.joinpath("app.js").read_text())
         self.assertIn("copy-command", static_root.joinpath("app.js").read_text())
+        self.assertIn("workflow-status", static_root.joinpath("app.js").read_text())
 
     def test_query_int_accepts_zero_and_positive_values(self) -> None:
         self.assertEqual(_query_int({"limit": ["0"]}, "limit", 25), 0)

@@ -109,7 +109,10 @@ def build_digested_label_plans(
 def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
     if mailbox == "all-mail":
         return True
-    return "INBOX" in message.label_ids
+    label_ids = set(message.label_ids)
+    if mailbox == "trash":
+        return "TRASH" in label_ids
+    return "INBOX" in label_ids
 
 
 def labels_for_classification(classification: ClassificationRecord) -> list[str]:
