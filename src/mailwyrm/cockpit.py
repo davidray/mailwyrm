@@ -9,8 +9,11 @@ from mailwyrm.actions import (
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_TRASH_AFTER_DIGEST,
+    GMAIL_INBOX_LABEL,
+    GMAIL_TRASH_LABEL,
     build_action_plans,
     build_trash_preview,
+    plan_action,
 )
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import build_digest_items
@@ -40,6 +43,7 @@ def build_daily_cockpit_payload(
     trash_preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
     all_digest_items = build_digest_items(state)
     digest_items = all_digest_items if limit is None else all_digest_items[:limit]
+    attention_lanes = _attention_lanes(state, mailbox=mailbox, limit=limit)
     audit_events = sorted(
         state.label_audit_events,
         key=lambda event: event.created_at,
@@ -65,6 +69,7 @@ def build_daily_cockpit_payload(
             "archive_after_digest": state.automation_policy.archive_after_digest_enabled,
             "trash_after_digest": state.automation_policy.trash_after_digest_enabled,
         },
+        "lanes": attention_lanes,
         "digest": {
             "total_items": len(all_digest_items),
             "showing_items": len(digest_items),
@@ -123,6 +128,67 @@ def _action_counts(action_plans) -> dict[str, int]:
     return counts
 
 
+def _attention_lanes(
+    state: MailwyrmState,
+    *,
+    mailbox: str,
+    limit: int | None,
+) -> dict[str, Any]:
+    lanes = {
+        "human": {
+            "total_items": 0,
+            "showing_items": 0,
+            "items": [],
+        },
+        "needs_review": {
+            "total_items": 0,
+            "showing_items": 0,
+            "items": [],
+        },
+    }
+    for message in sorted(
+        state.messages.values(),
+        key=lambda record: record.internal_date or "",
+        reverse=True,
+    ):
+        if not _message_matches_mailbox(message, mailbox):
+            continue
+        classification = state.classifications.get(message.id)
+        if classification is None:
+            continue
+        classification = effective_classification(
+            classification,
+            state.corrections.get(message.id),
+        )
+        plan = plan_action(message, classification)
+        lane_name = _lane_name(classification.category, plan.action)
+        if lane_name is None:
+            continue
+
+        lane = lanes[lane_name]
+        lane["total_items"] += 1
+        if limit is None or lane["showing_items"] < limit:
+            lane["items"].append(
+                _lane_item_payload(
+                    message,
+                    classification,
+                    action=plan.action,
+                    reason=plan.reason,
+                    mailbox=mailbox,
+                )
+            )
+            lane["showing_items"] += 1
+    return lanes
+
+
+def _lane_name(category: str, action: str) -> str | None:
+    if category == "human":
+        return "human"
+    if action in {ACTION_PROTECT, ACTION_REVIEW}:
+        return "needs_review"
+    return None
+
+
 def _digest_item_payload(item) -> dict[str, Any]:
     message = item.message
     classification = item.classification
@@ -139,6 +205,31 @@ def _digest_item_payload(item) -> dict[str, Any]:
         "automation_safety": classification.automation_safety,
         "confidence": classification.confidence,
         "reason": classification.reason,
+    }
+
+
+def _lane_item_payload(
+    message,
+    classification,
+    *,
+    action: str,
+    reason: str,
+    mailbox: str,
+) -> dict[str, Any]:
+    return {
+        "message_id": message.id,
+        "thread_id": message.thread_id,
+        "gmail_url": _gmail_url(message.id, mailbox=mailbox),
+        "subject": _header(message, "Subject", "(no subject)"),
+        "sender": _header(message, "From", "(unknown sender)"),
+        "snippet": _clean_snippet(message.snippet),
+        "category": classification.category,
+        "machine_type": classification.machine_type,
+        "importance": classification.importance,
+        "automation_safety": classification.automation_safety,
+        "confidence": classification.confidence,
+        "action": action,
+        "reason": reason,
     }
 
 
@@ -185,6 +276,14 @@ def _clean_snippet(snippet: str) -> str:
 
 def _single_line(text: str) -> str:
     return " ".join(text.split())
+
+
+def _message_matches_mailbox(message, mailbox: str) -> bool:
+    if mailbox == "all-mail":
+        return True
+    if mailbox == "trash":
+        return GMAIL_TRASH_LABEL in message.label_ids
+    return GMAIL_INBOX_LABEL in message.label_ids
 
 
 def _gmail_url(message_id: str, *, mailbox: str = "all-mail") -> str:
