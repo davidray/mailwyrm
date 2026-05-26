@@ -13,8 +13,10 @@ from mailwyrm.cli import (
     actions_command,
     actions_restore_archive_command,
     actions_restore_trash_command,
+    build_parser,
     daily_apply_command,
     daily_command,
+    daily_cockpit_command,
     daily_status_command,
     digest_command,
     digest_labels_apply_command,
@@ -38,6 +40,16 @@ from mailwyrm.store import MailwyrmState, write_state, write_token
 
 
 class CliTest(unittest.TestCase):
+    def test_daily_cockpit_parser_rejects_negative_limits(self) -> None:
+        parser = build_parser()
+
+        with patch.object(sys, "stderr", StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["daily", "cockpit", "--limit", "-1"])
+
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["daily", "cockpit", "--audit-limit", "-1"])
+
     def test_ensure_labels_requires_modify_scope(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
@@ -324,6 +336,57 @@ class CliTest(unittest.TestCase):
         self.assertIn("# Mailwyrm Machine Digest - 2026-05-25", stdout.getvalue())
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
         self.assertEqual(loaded.digest_audit_events[0].digest_title_date, "2026-05-25")
+
+    def test_daily_cockpit_prints_read_only_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        account_email="user@example.com",
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="medium",
+                                automation_safety="medium",
+                                confidence=0.82,
+                                reason="Automated sender or subject pattern.",
+                                suggested_actions=["digest"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    with patch("mailwyrm.cli.datetime") as fake_datetime:
+                        fake_datetime.now.return_value.date.return_value.isoformat.return_value = (
+                            "2026-05-25"
+                        )
+                        result = daily_cockpit_command(1, "inbox", 5)
+                from mailwyrm.store import read_state
+
+                loaded = read_state(Path(temp_dir) / "state.json")
+
+        self.assertEqual(result, 0)
+        self.assertIn("# Mailwyrm Daily Cockpit - 2026-05-25", stdout.getvalue())
+        self.assertIn("Read-only local view.", stdout.getvalue())
+        self.assertIn("## Machine Digest", stdout.getvalue())
+        self.assertIn("## Mailbox Actions", stdout.getvalue())
+        self.assertEqual(loaded.digest_audit_events, [])
 
     def test_daily_preview_prints_combined_report_without_writing_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

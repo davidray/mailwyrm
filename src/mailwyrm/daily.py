@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mailwyrm.actions import (
     ACTION_ARCHIVE_AFTER_DIGEST,
+    ACTION_KEEP,
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_RESTORE_ARCHIVE,
@@ -9,8 +10,12 @@ from mailwyrm.actions import (
     ACTION_TRASH_AFTER_DIGEST,
     GMAIL_INBOX_LABEL,
     build_action_plans,
+    build_trash_preview,
+    render_action_audit,
     render_action_preview,
+    render_trash_preview,
 )
+from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import render_digest
 from mailwyrm.labels import DIGESTED_LABEL
 from mailwyrm.labels import build_digested_label_plans, render_digested_label_preview
@@ -54,6 +59,79 @@ def render_daily_preview(
         "Archive apply remains gated to messages that have appeared in a digest.",
         "",
         render_action_preview(action_plans, mutates_gmail=mutates_gmail),
+        "",
+    ]
+    return "\n".join(sections)
+
+
+def render_daily_cockpit(
+    state: MailwyrmState,
+    *,
+    title_date: str,
+    limit: int | None = None,
+    mailbox: str = "inbox",
+    audit_limit: int = 10,
+) -> str:
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+    if audit_limit < 0:
+        raise ValueError("audit_limit must be non-negative")
+
+    action_plans = build_action_plans(state, limit=limit, mailbox=mailbox)
+    trash_preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
+    action_counts = _counts(plan.action for plan in action_plans)
+    classification_counts = _classification_counts(state)
+    policy = state.automation_policy
+
+    sections = [
+        f"# Mailwyrm Daily Cockpit - {title_date}",
+        "",
+        "Read-only local view. No Gmail or local state will be changed.",
+        "",
+        "## Account",
+        "",
+        f"Account: {state.account_email or 'unknown'}",
+        f"Last sync mailbox: {state.last_sync_mailbox or 'unknown'}",
+        f"Indexed messages: {len(state.messages)}",
+        f"Classified messages: {len(state.classifications)}",
+        "",
+        "## Attention",
+        "",
+        f"Human: {classification_counts.get('human', 0)}",
+        f"Machine: {classification_counts.get('machine', 0)}",
+        f"Needs review: {classification_counts.get('needs_review', 0)}",
+        f"Keep: {action_counts.get(ACTION_KEEP, 0)}",
+        f"Protect: {action_counts.get(ACTION_PROTECT, 0)}",
+        f"Review: {action_counts.get(ACTION_REVIEW, 0)}",
+        "",
+        "## Policy",
+        "",
+        f"Archive after digest: {_enabled(policy.archive_after_digest_enabled)}",
+        f"Trash after digest: {_enabled(policy.trash_after_digest_enabled)}",
+        "",
+        "## Machine Digest",
+        "",
+        render_digest(state, title_date=title_date, limit=limit),
+        "",
+        "## Mailbox Actions",
+        "",
+        f"Mailbox scope: {mailbox}",
+        "",
+        render_action_preview(action_plans),
+        "",
+        "## Trash Gate",
+        "",
+        render_trash_preview(trash_preview),
+        "",
+        "## Recent Gmail Audit",
+        "",
+        render_action_audit(state, limit=audit_limit),
+        "",
+        "## Useful Commands",
+        "",
+        "`uv run mailwyrm daily apply --limit 25 --client-secret /path/to/client_secret.json`",
+        "`uv run mailwyrm actions apply-trash --limit 10 --client-secret /path/to/client_secret.json`",
+        "`uv run mailwyrm actions audit --limit 25`",
         "",
     ]
     return "\n".join(sections)
@@ -165,8 +243,23 @@ def _counts(values) -> dict[str, int]:
     return counts
 
 
+def _classification_counts(state: MailwyrmState) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for message_id, classification in state.classifications.items():
+        classification = effective_classification(
+            classification,
+            state.corrections.get(message_id),
+        )
+        counts[classification.category] = counts.get(classification.category, 0) + 1
+    return counts
+
+
 def _latest_or_unknown(values) -> str:
     known_values = [value for value in values if value]
     if not known_values:
         return "unknown"
     return max(known_values)
+
+
+def _enabled(value: bool) -> str:
+    return "enabled" if value else "disabled"
