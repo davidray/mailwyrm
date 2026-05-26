@@ -45,7 +45,7 @@ def render_daily_preview(
         "",
         "## Machine Digest",
         "",
-        render_digest(state, title_date=title_date),
+        render_digest(state, title_date=title_date, limit=limit),
         "",
         "## Gmail Digested Labels",
         "",

@@ -141,6 +141,27 @@ class DailyPreviewTest(unittest.TestCase):
         self.assertIn("No Gmail actions will be performed.", preview)
         self.assertIn("msg-1\tarchive_after_digest\tmachine\t0.86\tReceipt", preview)
 
+    def test_daily_preview_limit_applies_to_digest_section(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Receipt"),
+                "msg-2": message("msg-2", "Shipping"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+        )
+
+        preview = render_daily_preview(
+            state,
+            title_date="2026-05-25",
+            limit=1,
+        )
+
+        self.assertIn("Receipt", preview)
+        self.assertNotIn("Shipping", preview)
+
     def test_daily_preview_can_report_pending_gmail_mutation(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", "Receipt")},

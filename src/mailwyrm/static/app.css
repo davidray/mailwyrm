@@ -385,7 +385,7 @@ pre {
     monospace;
   font-size: 0.84rem;
   line-height: 1.45;
-  white-space: pre-wrap;
+  white-space: pre;
 }
 
 [hidden] {

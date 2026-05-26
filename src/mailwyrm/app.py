@@ -15,7 +15,7 @@ from mailwyrm.cockpit import SUPPORTED_MAILBOXES, build_daily_cockpit_payload
 from mailwyrm.config import state_path
 from mailwyrm.daily import render_daily_preview
 from mailwyrm.labels import build_label_plans, render_label_preview
-from mailwyrm.store import read_state
+from mailwyrm.store import MailwyrmState, read_state
 
 
 DEFAULT_APP_HOST = "127.0.0.1"
@@ -195,7 +195,7 @@ def _query_workflow(params: dict[str, list[str]]) -> str:
 
 
 def build_workflow_preview_payload(
-    state,
+    state: MailwyrmState,
     *,
     workflow: str,
     limit: int | None = 25,
