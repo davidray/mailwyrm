@@ -21,6 +21,26 @@ uv run mailwyrm actions preview --mailbox all-mail --limit 500
 
 The default mailbox scope is `inbox`.
 
+## Trash Preview
+
+Mailwyrm can preview `trash_after_digest` candidates without mutating Gmail:
+
+```sh
+uv run mailwyrm actions preview-trash --limit 10
+uv run mailwyrm actions preview-trash --mailbox all-mail --limit 100
+```
+
+This command is read-only. It does not call Gmail, trash messages, archive messages, label messages, or write local state.
+
+Trash preview is gated by local automation policy and digest audit state. A message appears only when:
+
+- Local `trash_after_digest` policy is enabled.
+- The action planner chooses `trash_after_digest`.
+- The message has appeared in a local digest audit event.
+- The message is included by the selected mailbox scope.
+
+If trash policy is disabled, the report says so and shows how many trash candidates were skipped by policy.
+
 ## Archive Apply
 
 Mailwyrm can apply only `archive_after_digest` plans:
@@ -69,5 +89,6 @@ The preview is intentionally conservative:
 - Machine mail defaults to `archive_after_digest`.
 - `trash_after_digest` only appears for low-importance machine mail with high automation safety, high confidence, and an explicit `trash` suggested action.
 - Archive apply skips messages that have not yet been recorded in a local digest audit event.
+- Trash preview skips messages unless local trash policy is enabled and the message has appeared in a local digest audit event.
 
 Archive apply and archive restore write local audit events. A later trash command must require explicit local policy opt-in, Gmail confirmation, and an audit event before changing Gmail state. Use `mailwyrm policy status` to inspect the current policy boundary.

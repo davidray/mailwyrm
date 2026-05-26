@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from mailwyrm.cli import (
     actions_apply_archive_command,
+    actions_command,
     actions_restore_archive_command,
     daily_apply_command,
     daily_command,
@@ -21,6 +22,7 @@ from mailwyrm.cli import (
     policy_enable_trash_after_digest_command,
 )
 from mailwyrm.models import (
+    AutomationPolicy,
     GMAIL_MODIFY_SCOPE,
     GMAIL_READONLY_SCOPE,
     ClassificationRecord,
@@ -85,6 +87,65 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertTrue(loaded.automation_policy.trash_after_digest_enabled)
         self.assertIn("Trash after digest: enabled", stdout.getvalue())
+
+    def test_actions_preview_trash_prints_policy_gated_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Promo"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="low",
+                                automation_safety="high",
+                                confidence=0.94,
+                                reason="Low-risk promotion.",
+                                suggested_actions=["digest", "trash"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                        digest_audit_events=[
+                            DigestAuditEvent(
+                                message_id="msg-1",
+                                digest_title_date="2026-05-25",
+                                reason="Low-risk promotion.",
+                                classifier_version="rules-v0",
+                                created_at="2026-05-25T00:00:00+00:00",
+                            )
+                        ],
+                        automation_policy=AutomationPolicy(
+                            trash_after_digest_enabled=True,
+                        ),
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = actions_command(
+                        Namespace(
+                            actions_command="preview-trash",
+                            limit=10,
+                            mailbox="inbox",
+                        )
+                    )
+
+        self.assertEqual(result, 0)
+        self.assertIn("Mailbox Trash Preview", stdout.getvalue())
+        self.assertIn("Trash policy: enabled", stdout.getvalue())
+        self.assertIn("msg-1\ttrash_after_digest\tmachine\t0.94\tPromo", stdout.getvalue())
 
     def test_labels_apply_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

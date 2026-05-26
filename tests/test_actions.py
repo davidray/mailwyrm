@@ -9,11 +9,14 @@ from mailwyrm.actions import (
     ACTION_TRASH_AFTER_DIGEST,
     apply_archive_action_plans,
     build_action_plans,
+    build_trash_preview,
     plan_action,
     render_action_preview,
+    render_trash_preview,
     restore_archived_message,
 )
 from mailwyrm.models import (
+    AutomationPolicy,
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
@@ -215,6 +218,91 @@ class ActionsTest(unittest.TestCase):
 
         self.assertIn("Receipt with folded whitespace", preview)
         self.assertNotIn("Receipt\twith\nfolded whitespace", preview)
+
+    def test_build_trash_preview_requires_policy(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+        )
+
+        preview = build_trash_preview(state)
+
+        self.assertFalse(preview.policy_enabled)
+        self.assertEqual(preview.plans, [])
+        self.assertEqual(preview.skipped_policy_disabled, 1)
+
+    def test_build_trash_preview_requires_digest_event(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+
+        preview = build_trash_preview(state)
+
+        self.assertTrue(preview.policy_enabled)
+        self.assertEqual(preview.plans, [])
+        self.assertEqual(preview.skipped_not_digested, 1)
+
+    def test_build_trash_preview_returns_digested_trash_candidates(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+
+        preview = build_trash_preview(state)
+
+        self.assertEqual([plan.message.id for plan in preview.plans], ["msg-1"])
+
+    def test_render_trash_preview_reports_policy_and_candidates(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", subject="Promo")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+
+        report = render_trash_preview(build_trash_preview(state))
+
+        self.assertIn("Mailbox Trash Preview", report)
+        self.assertIn("No Gmail actions will be performed.", report)
+        self.assertIn("Trash policy: enabled", report)
+        self.assertIn("msg-1\ttrash_after_digest\tmachine\t0.94\tPromo", report)
 
     def test_apply_archive_action_plans_removes_inbox_and_audits(self) -> None:
         state = MailwyrmState(

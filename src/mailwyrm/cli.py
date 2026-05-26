@@ -10,7 +10,9 @@ from mailwyrm import __version__
 from mailwyrm.actions import (
     apply_archive_action_plans,
     build_action_plans,
+    build_trash_preview,
     render_action_preview,
+    render_trash_preview,
     restore_archived_message,
 )
 from mailwyrm.classifier import classify_message
@@ -348,6 +350,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max action plans to preview. Defaults to all classified messages.",
     )
     actions_preview_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to preview. Defaults to inbox.",
+    )
+    actions_preview_trash_parser = actions_subparsers.add_parser(
+        "preview-trash",
+        help="Preview policy-gated trash_after_digest candidates without mutating Gmail.",
+    )
+    actions_preview_trash_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max eligible trash plans to preview. Defaults to all eligible messages.",
+    )
+    actions_preview_trash_parser.add_argument(
         "--mailbox",
         choices=SYNC_MAILBOXES,
         default="inbox",
@@ -770,6 +788,11 @@ def actions_command(args: argparse.Namespace) -> int:
         plans = build_action_plans(state, limit=args.limit, mailbox=args.mailbox)
         print(render_action_preview(plans))
         return 0
+    if args.actions_command == "preview-trash":
+        state = read_state(state_path())
+        preview = build_trash_preview(state, limit=args.limit, mailbox=args.mailbox)
+        print(render_trash_preview(preview))
+        return 0
     if args.actions_command == "apply-archive":
         return actions_apply_archive_command(
             args.client_secret,
@@ -779,7 +802,10 @@ def actions_command(args: argparse.Namespace) -> int:
     if args.actions_command == "restore-archive":
         return actions_restore_archive_command(args.client_secret, args.message_id)
 
-    print("Choose `preview`, `apply-archive`, or `restore-archive`.", file=sys.stderr)
+    print(
+        "Choose `preview`, `preview-trash`, `apply-archive`, or `restore-archive`.",
+        file=sys.stderr,
+    )
     return 1
 
 

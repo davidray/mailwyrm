@@ -32,6 +32,14 @@ class ArchiveApplyResult:
     skipped_not_digested: int = 0
 
 
+@dataclass(frozen=True)
+class TrashPreview:
+    plans: list[ActionPlan]
+    policy_enabled: bool
+    skipped_policy_disabled: int = 0
+    skipped_not_digested: int = 0
+
+
 def build_action_plans(
     state: MailwyrmState,
     *,
@@ -61,6 +69,43 @@ def build_action_plans(
         if limit is not None and len(plans) >= limit:
             break
     return plans
+
+
+def build_trash_preview(
+    state: MailwyrmState,
+    *,
+    limit: int | None = None,
+    mailbox: str = "inbox",
+) -> TrashPreview:
+    action_plans = build_action_plans(state, mailbox=mailbox)
+    trash_plans = [
+        plan for plan in action_plans if plan.action == ACTION_TRASH_AFTER_DIGEST
+    ]
+    if not state.automation_policy.trash_after_digest_enabled:
+        return TrashPreview(
+            plans=[],
+            policy_enabled=False,
+            skipped_policy_disabled=len(trash_plans),
+        )
+
+    digested_message_ids = {
+        event.message_id for event in state.digest_audit_events
+    }
+    eligible_plans: list[ActionPlan] = []
+    skipped_not_digested = 0
+    for plan in trash_plans:
+        if plan.message.id not in digested_message_ids:
+            skipped_not_digested += 1
+            continue
+        eligible_plans.append(plan)
+        if limit is not None and len(eligible_plans) >= limit:
+            break
+
+    return TrashPreview(
+        plans=eligible_plans,
+        policy_enabled=True,
+        skipped_not_digested=skipped_not_digested,
+    )
 
 
 def plan_action(
@@ -141,6 +186,45 @@ def render_action_preview(
     lines.extend(["", "Message ID\tAction\tCategory\tConfidence\tSubject\tReason"])
 
     for plan in plans:
+        subject = _table_field(plan.message.headers.get("Subject", "(no subject)"))
+        reason = _table_field(plan.reason)
+        lines.append(
+            "\t".join(
+                [
+                    plan.message.id,
+                    plan.action,
+                    plan.classification.category,
+                    f"{plan.classification.confidence:.2f}",
+                    subject,
+                    reason,
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def render_trash_preview(preview: TrashPreview) -> str:
+    lines = [
+        "Mailbox Trash Preview",
+        "No Gmail actions will be performed.",
+        "",
+        f"Trash policy: {'enabled' if preview.policy_enabled else 'disabled'}",
+    ]
+    if preview.skipped_policy_disabled:
+        lines.append(
+            f"Skipped by disabled trash policy: {preview.skipped_policy_disabled}"
+        )
+    if preview.skipped_not_digested:
+        lines.append(
+            f"Skipped because not digested: {preview.skipped_not_digested}"
+        )
+
+    if not preview.plans:
+        lines.extend(["", "No messages are eligible for trash preview."])
+        return "\n".join(lines)
+
+    lines.extend(["", "Message ID\tAction\tCategory\tConfidence\tSubject\tReason"])
+    for plan in preview.plans:
         subject = _table_field(plan.message.headers.get("Subject", "(no subject)"))
         reason = _table_field(plan.reason)
         lines.append(
