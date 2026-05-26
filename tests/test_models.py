@@ -97,6 +97,60 @@ class MessageRecordTest(unittest.TestCase):
 
         self.assertEqual(record.body_text, "Delivery update\nFriday")
 
+    def test_message_record_ignores_script_style_and_head_html_text(self) -> None:
+        message = {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Snippet",
+            "payload": {
+                "mimeType": "text/html",
+                "headers": [],
+                "body": {
+                    "data": (
+                        "PGh0bWw-PGhlYWQ-PHRpdGxlPk5vdCBtYWlsPC90aXRsZT48c3R5bGU-"
+                        "LmEge308PC9zdHlsZT48L2hlYWQ-PGJvZHk-PHNjcmlwdD5ldmlsKCk8"
+                        "L3NjcmlwdD48cD5SZWFsIG1lc3NhZ2U8L3A-PC9ib2R5PjwvaHRtbD4"
+                    )
+                },
+            },
+        }
+
+        record = MessageRecord.from_gmail_message(message, body_char_limit=100)
+
+        self.assertEqual(record.body_text, "Real message")
+
+    def test_message_record_ignores_malformed_body_payloads(self) -> None:
+        message = {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Snippet",
+            "payload": {
+                "mimeType": "text/plain",
+                "headers": [],
+                "body": {"data": "abcde"},
+            },
+        }
+
+        record = MessageRecord.from_gmail_message(message, body_char_limit=100)
+
+        self.assertEqual(record.body_text, "")
+
+    def test_message_record_does_not_fetch_attachment_body_parts_yet(self) -> None:
+        message = {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Snippet",
+            "payload": {
+                "mimeType": "text/plain",
+                "headers": [],
+                "body": {"attachmentId": "ATTACHMENT_1"},
+            },
+        }
+
+        record = MessageRecord.from_gmail_message(message, body_char_limit=100)
+
+        self.assertEqual(record.body_text, "")
+
     def test_message_record_does_not_extract_body_without_limit(self) -> None:
         message = {
             "id": "msg-1",

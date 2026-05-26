@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import re
 from dataclasses import asdict, dataclass
 from html.parser import HTMLParser
@@ -154,7 +155,10 @@ def _collect_body_parts(
 
 def _decode_gmail_body_data(data: str) -> str:
     padding = "=" * (-len(data) % 4)
-    decoded = base64.urlsafe_b64decode(f"{data}{padding}")
+    try:
+        decoded = base64.urlsafe_b64decode(f"{data}{padding}")
+    except (binascii.Error, ValueError):
+        return ""
     return normalize_email_text(decoded.decode("utf-8", errors="replace"))
 
 
@@ -171,19 +175,34 @@ def _normalize_body_text(value: str) -> str:
 
 
 class _BodyTextHTMLParser(HTMLParser):
+    _IGNORED_TAGS = {"head", "script", "style", "title"}
+
     def __init__(self) -> None:
         super().__init__()
         self._parts: list[str] = []
+        self._ignored_depth = 0
 
     def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in self._IGNORED_TAGS:
+            self._ignored_depth += 1
+            return
+        if self._ignored_depth:
+            return
         if tag in {"br", "div", "li", "p", "tr"}:
             self._parts.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
+        if tag in self._IGNORED_TAGS:
+            self._ignored_depth = max(0, self._ignored_depth - 1)
+            return
+        if self._ignored_depth:
+            return
         if tag in {"div", "li", "p", "tr"}:
             self._parts.append("\n")
 
     def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
         self._parts.append(data)
 
     def text(self) -> str:

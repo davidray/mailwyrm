@@ -24,6 +24,9 @@ When enabled, Mailwyrm extracts text from Gmail `format=full` message payloads:
 - Truncate to the configured character limit before writing local state.
 
 The extracted text is stored on each local `MessageRecord` as `body_text`.
+Later metadata-only syncs preserve previously collected `body_text` for messages that remain in the local index.
+
+Current limitation: Gmail may place larger body parts behind `body.attachmentId` instead of inline `body.data`. Mailwyrm does not fetch those body attachments yet, so some messages may still have empty `body_text` even when `--include-body` is enabled.
 
 ## Current Use
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -614,6 +615,9 @@ def sync_command(
         else:
             message = client.get_message_metadata(str(message_ref["id"]))
             record = MessageRecord.from_gmail_message(message)
+            previous = state.messages.get(record.id)
+            if previous is not None and previous.body_text:
+                record = replace(record, body_text=previous.body_text)
         stats = refresh_message_from_gmail(state, record, stats)
 
     write_state(state_path(), state)

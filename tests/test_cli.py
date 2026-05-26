@@ -65,6 +65,47 @@ class CliTest(unittest.TestCase):
         self.assertEqual(client.full_message_ids, [])
         self.assertEqual(state.messages["msg-1"].body_text, "")
 
+    def test_sync_command_preserves_body_text_during_metadata_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                state_path = Path(temp_dir) / "state.json"
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_READONLY_SCOPE,
+                    ),
+                )
+                write_state(
+                    state_path,
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Hello"},
+                                body_text="Previously fetched body.",
+                            )
+                        }
+                    ),
+                )
+                client = FakeSyncGmailClient()
+
+                with patch("mailwyrm.cli.GmailClient", return_value=client):
+                    with patch.object(sys, "stdout", StringIO()) as stdout:
+                        result = sync_command(Path("client_secret.json"), 1, "inbox")
+
+                state = read_state(state_path)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(state.messages["msg-1"].body_text, "Previously fetched body.")
+        self.assertIn("unchanged: 1", stdout.getvalue())
+
     def test_sync_command_can_fetch_bounded_body_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
