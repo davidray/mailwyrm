@@ -47,7 +47,7 @@ from mailwyrm.store import read_state, read_token, write_state, write_token
 from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
 
 
-SYNC_MAILBOXES = ("inbox", "all-mail")
+SYNC_MAILBOXES = ("inbox", "all-mail", "trash")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,6 +453,7 @@ def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
     message_refs = client.list_messages(
         max_results=limit,
         label_ids=label_ids_for_mailbox(mailbox),
+        include_spam_trash=include_spam_trash_for_mailbox(mailbox),
     )
     stats = SyncStats()
     for message_ref in message_refs:
@@ -469,7 +470,13 @@ def sync_command(client_secret: Path, limit: int, mailbox: str) -> int:
 def label_ids_for_mailbox(mailbox: str) -> tuple[str, ...] | None:
     if mailbox == "all-mail":
         return None
+    if mailbox == "trash":
+        return ("TRASH",)
     return ("INBOX",)
+
+
+def include_spam_trash_for_mailbox(mailbox: str) -> bool:
+    return mailbox == "trash"
 
 
 def ensure_labels_command(client_secret: Path) -> int:

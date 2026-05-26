@@ -35,8 +35,11 @@ class GmailClient:
         *,
         max_results: int = 25,
         label_ids: tuple[str, ...] | None = ("INBOX",),
+        include_spam_trash: bool = False,
     ) -> list[dict[str, Any]]:
         query: dict[str, str | int] = {"maxResults": max_results}
+        if include_spam_trash:
+            query["includeSpamTrash"] = "true"
         url = f"{GMAIL_API_BASE}/users/me/messages?{urllib.parse.urlencode(query)}"
         if label_ids:
             label_query = "&".join(

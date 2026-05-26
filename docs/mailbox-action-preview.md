@@ -83,6 +83,12 @@ This removes Gmail's `TRASH` label, adds Gmail's `INBOX` label when needed, upda
 
 The message must already exist in the local Mailwyrm index and must currently have the `TRASH` label locally. If Gmail has changed independently, run sync again to refresh local labels from Gmail.
 
+To test this with a message already in Gmail Trash, sync Trash first:
+
+```sh
+uv run mailwyrm sync --mailbox trash --limit 25 --client-secret /path/to/client_secret.json
+```
+
 ## Action Vocabulary
 
 - `keep`: human correspondence should stay foregrounded.

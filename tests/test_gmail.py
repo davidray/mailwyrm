@@ -156,6 +156,31 @@ class GmailClientTest(unittest.TestCase):
 
         self.assertIn("labelIds=INBOX", urls[0])
 
+    def test_list_messages_can_include_spam_and_trash(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            return {"messages": []}
+
+        client._request = fake_request
+
+        client.list_messages(
+            max_results=10,
+            label_ids=("TRASH",),
+            include_spam_trash=True,
+        )
+
+        self.assertIn("includeSpamTrash=true", urls[0])
+        self.assertIn("labelIds=TRASH", urls[0])
+
 
 if __name__ == "__main__":
     unittest.main()
