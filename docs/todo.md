@@ -23,4 +23,4 @@ These items remain after the current Gmail trash-apply and action-audit mileston
    - Improve Gmail API error messages with likely fixes.
    - Make testing commands easier to discover from the CLI.
    - Surface sync state, last mailbox scope, and account identity in a concise status view.
-
+   - After Gmail API mutations, tell the user that Gmail web UI may need a refresh before moved, archived, trashed, or labeled messages visibly update.
