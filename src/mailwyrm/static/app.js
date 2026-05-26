@@ -309,7 +309,11 @@ function detailSection(title, lines, options = {}) {
 function classificationLines(payload) {
   const classification = payload.classification;
   if (!classification) {
-    return ["This message has not been classified locally."];
+    const lines = ["This message has not been classified locally."];
+    if (payload.correction) {
+      lines.push(correctionLine(payload.correction));
+    }
+    return lines;
   }
   const lines = [
     `Category: ${classification.category}`,
@@ -322,11 +326,14 @@ function classificationLines(payload) {
     `Classifier: ${classification.classifier_version}`,
   ];
   if (payload.correction) {
-    lines.push(
-      `Correction: ${payload.correction.category} (${payload.correction.reason || "no reason"})`
-    );
+    lines.push(correctionLine(payload.correction));
   }
   return lines;
+}
+
+function correctionLine(correction) {
+  const machineType = correction.machine_type ? `, ${correction.machine_type}` : "";
+  return `Correction: ${correction.category}${machineType} (${correction.reason || "no reason"})`;
 }
 
 function actionLines(payload) {
@@ -609,7 +616,7 @@ function link(href, text, className = "") {
   const a = document.createElement("a");
   a.href = href;
   a.target = "_blank";
-  a.rel = "noreferrer";
+  a.rel = "noopener noreferrer";
   if (className) {
     a.className = className;
   }

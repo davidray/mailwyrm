@@ -340,6 +340,7 @@ button {
 
 .detail-body {
   max-height: 360px;
+  overflow: auto;
   white-space: pre-wrap;
 }
 

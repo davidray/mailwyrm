@@ -67,6 +67,9 @@ class AppTest(unittest.TestCase):
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("detail-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("view-detail", static_root.joinpath("app.js").read_text())
+        self.assertIn("correctionLine", static_root.joinpath("app.js").read_text())
+        self.assertIn("noopener noreferrer", static_root.joinpath("app.js").read_text())
+        self.assertIn("overflow: auto", static_root.joinpath("app.css").read_text())
         self.assertIn("run-local-action", static_root.joinpath("app.js").read_text())
         self.assertIn(
             "Local app view; Gmail mutations require CLI",

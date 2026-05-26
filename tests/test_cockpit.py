@@ -3,6 +3,7 @@ import unittest
 from mailwyrm.cockpit import build_daily_cockpit_payload, build_message_detail_payload
 from mailwyrm.models import (
     AutomationPolicy,
+    ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
     LabelAuditEvent,
@@ -277,6 +278,25 @@ class CockpitTest(unittest.TestCase):
 
         self.assertIsNone(payload["classification"])
         self.assertIsNone(payload["suggested_action"])
+
+    def test_build_message_detail_payload_includes_correction_without_classification(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Corrected")},
+            corrections={
+                "msg-1": ClassificationCorrection(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="newsletter",
+                    reason="User correction.",
+                )
+            },
+        )
+
+        payload = build_message_detail_payload(state, message_id="msg-1")
+
+        self.assertIsNone(payload["classification"])
+        self.assertEqual(payload["correction"]["category"], "machine")
+        self.assertEqual(payload["correction"]["machine_type"], "newsletter")
 
     def test_build_message_detail_payload_rejects_missing_messages(self) -> None:
         with self.assertRaises(KeyError):
