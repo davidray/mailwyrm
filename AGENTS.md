@@ -35,7 +35,7 @@ Before making product or architecture changes, read:
 
 The user may use short commands for common project workflows:
 
-- `fb`: Review and address pull request feedback for the current branch or explicitly named PR.
+- `fb`: Review and address pull request feedback for the current branch or explicitly named PR. After fixing and pushing, resolve the GitHub review threads that were actually addressed; leave ambiguous, unfixed, or intentionally deferred threads unresolved and call them out.
 - `pr`: Create a ready-for-review pull request for the current branch.
 - `rs`: Restart the desktop app, or start it if it is not running. If no desktop app process exists yet, explain that and give the closest available run command.
 - `tst`: Prepare the environment for testing and give concise test instructions, including any live Gmail steps when relevant.
