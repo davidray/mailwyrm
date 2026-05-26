@@ -16,6 +16,10 @@ from mailwyrm.models import (
 
 DIGEST_SECTION_ORDER = (
     *MACHINE_TYPES,
+    "delivery",
+    "newsletter",
+    "security",
+    "notification",
     "needs_review",
 )
 
@@ -150,12 +154,17 @@ def _digest_items(state: MailwyrmState) -> list[DigestItem]:
 def _section_for(classification: ClassificationRecord) -> str:
     if classification.category == "needs_review":
         return "needs_review"
-    return classification.machine_type or "notification"
+    return classification.machine_type or "transactional"
 
 
 def _section_title(section: str) -> str:
     return {
+        "marketing": "Marketing",
         "transactional": "Transactional",
+        "news": "News",
+        "spam": "Spam",
+        "product_community": "Product Community",
+        # Legacy section names from earlier local state.
         "delivery": "Deliveries",
         "newsletter": "Newsletters",
         "security": "Security And Account",

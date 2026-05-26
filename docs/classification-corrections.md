@@ -8,7 +8,7 @@ Corrections do not mutate Gmail.
 
 ```sh
 uv run mailwyrm list --show-classification
-uv run mailwyrm correct MESSAGE_ID machine --machine-type newsletter --reason "Newsletter from a service"
+uv run mailwyrm correct MESSAGE_ID machine --machine-type news --reason "Newsletter from a service"
 uv run mailwyrm correct MESSAGE_ID human --reason "Direct note from a person"
 uv run mailwyrm corrections
 ```
@@ -19,4 +19,3 @@ Corrected classifications are used by:
 - `mailwyrm digest`
 
 The original classifier output remains stored so corrections can be used later for evaluation.
-

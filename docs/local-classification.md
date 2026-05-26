@@ -11,6 +11,8 @@ It intentionally does not write Gmail labels, archive, trash, or mutate mailbox 
 - Uses a deterministic rules-based baseline so tests and behavior are stable.
 - Uses opt-in synced body text as an additional signal when `body_text` is present.
 - Exposes classifications through the CLI.
+- Classifies machine mail into durable `machine_type` buckets:
+  `marketing`, `transactional`, `news`, `spam`, and `product_community`.
 
 ## Commands
 
@@ -39,4 +41,7 @@ This matches the project AI behavior contract closely enough that a later LLM-ba
 
 High-risk machine-generated mail, such as password, payment, banking, legal, tax, insurance, medical, and security mail, is classified as `needs_review` with low automation safety.
 
-Low-risk Copilot notifications from `notifications@github.com` are classified as machine notifications with high automation safety and `digest` plus `trash` suggested actions. High-risk terms still override this rule and protect the message from trash automation.
+Low-risk Copilot notifications from `notifications@github.com` are classified
+as `product_community` machine mail with high automation safety and `digest`
+plus `trash` suggested actions. High-risk terms still override this rule and
+protect the message from trash automation.

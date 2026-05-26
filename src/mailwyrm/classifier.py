@@ -28,9 +28,11 @@ MACHINE_SENDER_TERMS = (
     "alert",
     "billing",
     "bounce",
+    "community",
     "delivery",
     "do-not-reply",
     "donotreply",
+    "forum",
     "hello@",
     "mailer",
     "marketing",
@@ -50,9 +52,12 @@ MACHINE_SUBJECT_TERMS = (
     "confirmation",
     "delivered",
     "delivery",
+    "digest",
+    "discussion",
     "invoice",
     "newsletter",
     "order",
+    "promo",
     "receipt",
     "renewal",
     "reset your password",
@@ -78,7 +83,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
 
     if high_risk:
         category = "needs_review"
-        machine_type = _machine_type(text)
+        machine_type = None
         importance = "high"
         automation_safety = "low"
         confidence = 0.74
@@ -86,7 +91,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
         suggested_actions = ["review", "protect"]
     elif _is_github_copilot_notification(sender_address, text):
         category = "machine"
-        machine_type = "notification"
+        machine_type = "product_community"
         importance = "low"
         automation_safety = "high"
         confidence = 0.94
@@ -95,11 +100,11 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     elif machine_score >= 2 and not human_reply_signal:
         category = "machine"
         machine_type = _machine_type(text)
-        importance = "low" if machine_type in {"newsletter", "delivery"} else "medium"
-        automation_safety = "medium"
+        importance = "medium" if machine_type == "transactional" else "low"
+        automation_safety = "high" if machine_type == "spam" else "medium"
         confidence = min(0.95, 0.62 + (machine_score * 0.1))
         reason = "Automated sender or subject pattern."
-        suggested_actions = ["digest"]
+        suggested_actions = ["digest", "trash"] if machine_type == "spam" else ["digest"]
     elif human_reply_signal:
         category = "human"
         machine_type = None
@@ -142,15 +147,65 @@ def _machine_score(sender_address: str, subject: str, text: str) -> int:
 
 
 def _machine_type(text: str) -> str | None:
-    if _contains_any(text, ("newsletter", "unsubscribe")):
-        return "newsletter"
-    if _contains_any(text, ("delivered", "delivery", "shipped", "tracking")):
-        return "delivery"
-    if _contains_any(text, ("receipt", "invoice", "statement", "payment")):
+    if _contains_any(
+        text,
+        (
+            "winner",
+            "lottery",
+            "crypto giveaway",
+            "limited time prize",
+            "act now",
+            "free money",
+        ),
+    ):
+        return "spam"
+    if _contains_any(
+        text,
+        (
+            "receipt",
+            "invoice",
+            "statement",
+            "payment",
+            "delivered",
+            "delivery",
+            "shipped",
+            "tracking",
+            "order",
+            "renewal",
+            "subscription",
+        ),
+    ):
         return "transactional"
-    if _contains_any(text, ("security", "password", "verification code", "account recovery")):
-        return "security"
-    return "notification"
+    if _contains_any(
+        text,
+        (
+            "community",
+            "discussion",
+            "forum",
+            "github",
+            "pull request",
+            "issue",
+            "commented",
+        ),
+    ):
+        return "product_community"
+    if _contains_any(text, ("newsletter", "news", "weekly digest", "daily digest")):
+        return "news"
+    if _contains_any(
+        text,
+        (
+            "unsubscribe",
+            "marketing",
+            "promo",
+            "promotion",
+            "sale",
+            "discount",
+            "deal",
+            "offer",
+        ),
+    ):
+        return "marketing"
+    return "transactional"
 
 
 def _is_github_copilot_notification(sender_address: str, text: str) -> bool:

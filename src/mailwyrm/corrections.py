@@ -32,7 +32,7 @@ def add_correction(
     if category != "machine" and machine_type is not None:
         raise CorrectionError("machine_type can only be set for machine corrections")
     if category == "machine" and machine_type is None:
-        machine_type = "notification"
+        machine_type = "transactional"
     if category == "machine" and machine_type not in MACHINE_TYPES:
         raise CorrectionError(
             f"machine_type must be one of: {', '.join(MACHINE_TYPES)}"

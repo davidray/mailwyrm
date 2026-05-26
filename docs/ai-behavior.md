@@ -5,7 +5,9 @@
 The classifier should return:
 
 - `category`: `human`, `machine`, or `needs_review`.
-- `machine_type`: optional structured subtype for machine mail.
+- `machine_type`: optional structured subtype for machine mail. Current
+  canonical machine types are `marketing`, `transactional`, `news`, `spam`,
+  and `product_community`.
 - `importance`: low, medium, or high.
 - `automation_safety`: low, medium, or high.
 - `confidence`: numeric score.
@@ -52,10 +54,10 @@ Mailwyrm may suggest durable policies based on repeated user behavior, but the u
 
 Example policies:
 
-- Summarize and trash routine delivery notifications after the daily digest.
-- Archive receipts after summarization, but do not trash them.
+- Archive transactional records after summarization, but do not trash them.
+- Summarize and trash approved spam after the daily digest.
 - Always keep security alerts visible.
-- Treat newsletters from known people as human-adjacent.
+- Treat product community notifications from known projects as useful background.
 - Never auto-trash mail from specified senders or domains.
 
 ## Tone
@@ -67,4 +69,3 @@ The system should not pretend to be certain when it is making a probabilistic ju
 - "Automated receipt from a known merchant."
 - "Security-related account alert; protected from auto-trash."
 - "Looks like a personal reply despite coming through a notification system."
-

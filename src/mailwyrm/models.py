@@ -28,11 +28,11 @@ AutomationSafety = str
 
 CLASSIFICATION_CATEGORIES = ("human", "machine", "needs_review")
 MACHINE_TYPES = (
+    "marketing",
     "transactional",
-    "delivery",
-    "newsletter",
-    "security",
-    "notification",
+    "news",
+    "spam",
+    "product_community",
 )
 
 

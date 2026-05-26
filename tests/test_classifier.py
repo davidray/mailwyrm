@@ -25,14 +25,65 @@ def message(
 
 
 class ClassifierTest(unittest.TestCase):
-    def test_classifies_machine_newsletter(self) -> None:
+    def test_classifies_machine_news(self) -> None:
         classification = classify_message(
             message(sender="Newsletter <newsletter@example.com>", subject="Weekly newsletter")
         )
 
         self.assertEqual(classification.category, "machine")
-        self.assertEqual(classification.machine_type, "newsletter")
+        self.assertEqual(classification.machine_type, "news")
         self.assertIn("digest", classification.suggested_actions)
+
+    def test_classifies_machine_marketing(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Marketing <marketing@example.com>",
+                subject="Limited time product discount",
+                snippet="Unsubscribe from promotional offers any time.",
+            )
+        )
+
+        self.assertEqual(classification.category, "machine")
+        self.assertEqual(classification.machine_type, "marketing")
+        self.assertIn("digest", classification.suggested_actions)
+
+    def test_classifies_machine_transactional(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Store <receipt@example.com>",
+                subject="Your order receipt",
+                snippet="Your order shipped and tracking is available.",
+            )
+        )
+
+        self.assertEqual(classification.category, "machine")
+        self.assertEqual(classification.machine_type, "transactional")
+
+    def test_classifies_machine_spam(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Winner <marketing@example.com>",
+                subject="Limited time prize",
+                snippet="Act now to claim your free money.",
+            )
+        )
+
+        self.assertEqual(classification.category, "machine")
+        self.assertEqual(classification.machine_type, "spam")
+        self.assertEqual(classification.automation_safety, "high")
+        self.assertIn("trash", classification.suggested_actions)
+
+    def test_classifies_machine_product_community(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Forum <community@example.com>",
+                subject="New discussion in the product community",
+                snippet="A member commented on your issue.",
+            )
+        )
+
+        self.assertEqual(classification.category, "machine")
+        self.assertEqual(classification.machine_type, "product_community")
 
     def test_protects_high_risk_machine_mail(self) -> None:
         classification = classify_message(
@@ -77,7 +128,7 @@ class ClassifierTest(unittest.TestCase):
         )
 
         self.assertEqual(classification.category, "machine")
-        self.assertEqual(classification.machine_type, "notification")
+        self.assertEqual(classification.machine_type, "product_community")
         self.assertEqual(classification.importance, "low")
         self.assertEqual(classification.automation_safety, "high")
         self.assertGreaterEqual(classification.confidence, 0.9)
@@ -108,7 +159,7 @@ class ClassifierTest(unittest.TestCase):
         )
 
         self.assertEqual(classification.category, "machine")
-        self.assertEqual(classification.machine_type, "newsletter")
+        self.assertEqual(classification.machine_type, "news")
         self.assertIn("digest", classification.suggested_actions)
 
 

@@ -53,12 +53,12 @@ class CorrectionsTest(unittest.TestCase):
             state,
             message_id="msg-1",
             category="machine",
-            machine_type="newsletter",
-            reason="Known newsletter.",
+            machine_type="news",
+            reason="Known news.",
         )
 
         self.assertEqual(correction.category, "machine")
-        self.assertEqual(state.corrections["msg-1"].machine_type, "newsletter")
+        self.assertEqual(state.corrections["msg-1"].machine_type, "news")
 
     def test_rejects_unknown_message(self) -> None:
         state = MailwyrmState()
@@ -74,7 +74,7 @@ class CorrectionsTest(unittest.TestCase):
                 state,
                 message_id="msg-1",
                 category="human",
-                machine_type="newsletter",
+                machine_type="news",
             )
 
     def test_rejects_unknown_machine_type(self) -> None:
@@ -93,7 +93,7 @@ class CorrectionsTest(unittest.TestCase):
 
         correction = add_correction(state, message_id="msg-1", category="machine")
 
-        self.assertEqual(correction.machine_type, "notification")
+        self.assertEqual(correction.machine_type, "transactional")
 
     def test_effective_classification_preserves_original_with_user_overlay(self) -> None:
         state = MailwyrmState(messages={"msg-1": message("msg-1")})
@@ -101,16 +101,16 @@ class CorrectionsTest(unittest.TestCase):
             state,
             message_id="msg-1",
             category="machine",
-            machine_type="newsletter",
-            reason="Known newsletter.",
+            machine_type="news",
+            reason="Known news.",
         )
 
         effective = effective_classification(classification("msg-1"), correction)
 
         self.assertEqual(effective.category, "machine")
-        self.assertEqual(effective.machine_type, "newsletter")
+        self.assertEqual(effective.machine_type, "news")
         self.assertEqual(effective.confidence, 1.0)
-        self.assertEqual(effective.reason, "Known newsletter.")
+        self.assertEqual(effective.reason, "Known news.")
         self.assertEqual(effective.classifier_version, "rules-v0+user-correction")
 
     def test_correction_report_counts_category_changes(self) -> None:

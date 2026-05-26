@@ -43,6 +43,10 @@ Machine correspondence:
 - SaaS alerts and automated reports.
 - Calendar, travel, finance, and subscription updates.
 
+Useful machine-mail buckets include marketing, transactional, news, spam, and
+product community mail. These categories should describe how the user is likely
+to treat the message, not merely which system generated it.
+
 Machine does not mean unimportant. A bank fraud alert is machine correspondence, but it should be treated as high importance and low automation safety.
 
 ## Daily Machine Digest
@@ -86,4 +90,3 @@ The special parts are:
 - Auditable AI decisions.
 - Daily machine-mail compression.
 - Separation of attention from record keeping.
-
