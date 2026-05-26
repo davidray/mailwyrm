@@ -38,3 +38,4 @@ This matches the project AI behavior contract closely enough that a later LLM-ba
 
 High-risk machine-generated mail, such as password, payment, banking, legal, tax, insurance, medical, and security mail, is classified as `needs_review` with low automation safety.
 
+Low-risk Copilot notifications from `notifications@github.com` are classified as machine notifications with high automation safety and `digest` plus `trash` suggested actions. High-risk terms still override this rule and protect the message from trash automation.

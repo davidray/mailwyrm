@@ -122,6 +122,16 @@ class DailyPreviewTest(unittest.TestCase):
                     action="archive_after_digest",
                     label_names=["INBOX"],
                 ),
+                label_event(
+                    "msg-1",
+                    action="trash_after_digest",
+                    label_names=["TRASH"],
+                ),
+                label_event(
+                    "msg-1",
+                    action="restore_trash",
+                    label_names=["TRASH", "INBOX"],
+                ),
             ],
         )
 
@@ -136,6 +146,8 @@ class DailyPreviewTest(unittest.TestCase):
         self.assertIn("Last digest date: 2026-05-25", status)
         self.assertIn("Digested label events: 1", status)
         self.assertIn("Archive events: 1", status)
+        self.assertIn("Trash events: 1", status)
+        self.assertIn("Restore trash events: 1", status)
         self.assertIn("Archive after digest: 1", status)
         self.assertIn("Archive candidates not yet digested: 0", status)
         self.assertIn("- 2026-05-25: 1", status)

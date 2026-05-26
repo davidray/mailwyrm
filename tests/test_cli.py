@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from mailwyrm.cli import (
     actions_apply_archive_command,
+    actions_apply_trash_command,
     actions_command,
     actions_restore_archive_command,
     actions_restore_trash_command,
@@ -661,6 +662,190 @@ class CliTest(unittest.TestCase):
             "Skipped 2 archive candidate(s) because they have not appeared in a digest yet.",
             stdout.getvalue(),
         )
+
+    def test_actions_apply_trash_prints_preview_report_before_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Promo"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="low",
+                                automation_safety="high",
+                                confidence=0.94,
+                                reason="Low-risk promotion.",
+                                suggested_actions=["digest", "trash"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                        digest_audit_events=[
+                            DigestAuditEvent(
+                                message_id="msg-1",
+                                digest_title_date="2026-05-25",
+                                reason="Low-risk promotion.",
+                                classifier_version="rules-v0",
+                                created_at="2026-05-25T00:00:00+00:00",
+                            )
+                        ],
+                        automation_policy=AutomationPolicy(
+                            trash_after_digest_enabled=True,
+                        ),
+                    ),
+                )
+
+                with patch("mailwyrm.cli.GmailClient"):
+                    from mailwyrm.actions import TrashApplyResult
+
+                    with patch(
+                        "mailwyrm.cli.apply_trash_action_preview",
+                        return_value=TrashApplyResult(applied=1),
+                    ):
+                        with patch.object(sys, "stdout", StringIO()) as stdout:
+                            result = actions_apply_trash_command(
+                                Path("client_secret.json"),
+                                1,
+                                "inbox",
+                            )
+
+        self.assertEqual(result, 0)
+        self.assertIn("Mailbox Trash Preview", stdout.getvalue())
+        self.assertIn("Gmail will be modified after this preview.", stdout.getvalue())
+        self.assertIn("msg-1\ttrash_after_digest\tmachine\t0.94\tPromo", stdout.getvalue())
+        self.assertIn(
+            "Trashed 1 message(s) using Gmail's trash operation.",
+            stdout.getvalue(),
+        )
+
+    def test_actions_apply_trash_reports_disabled_policy_without_gmail(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                write_token(
+                    Path(temp_dir) / "gmail-token.json",
+                    GmailToken(
+                        access_token="token",
+                        expires_at=9999999999,
+                        scope=GMAIL_MODIFY_SCOPE,
+                    ),
+                )
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["INBOX"],
+                                snippet="Snippet",
+                                headers={"Subject": "Promo"},
+                            )
+                        },
+                        classifications={
+                            "msg-1": ClassificationRecord(
+                                message_id="msg-1",
+                                category="machine",
+                                machine_type="notification",
+                                importance="low",
+                                automation_safety="high",
+                                confidence=0.94,
+                                reason="Low-risk promotion.",
+                                suggested_actions=["digest", "trash"],
+                                classifier_version="rules-v0",
+                            )
+                        },
+                        digest_audit_events=[
+                            DigestAuditEvent(
+                                message_id="msg-1",
+                                digest_title_date="2026-05-25",
+                                reason="Low-risk promotion.",
+                                classifier_version="rules-v0",
+                                created_at="2026-05-25T00:00:00+00:00",
+                            )
+                        ],
+                    ),
+                )
+
+                with patch("mailwyrm.cli.GmailClient") as gmail_client:
+                    with patch.object(sys, "stdout", StringIO()) as stdout:
+                        result = actions_apply_trash_command(
+                            Path("client_secret.json"),
+                            1,
+                            "inbox",
+                        )
+
+        self.assertEqual(result, 0)
+        gmail_client.assert_not_called()
+        self.assertIn("Trash policy: disabled", stdout.getvalue())
+        self.assertIn(
+            "Trash policy is disabled; no Gmail trash actions were applied.",
+            stdout.getvalue(),
+        )
+
+    def test_actions_audit_prints_local_audit_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAILWYRM_HOME": temp_dir}):
+                from mailwyrm.models import LabelAuditEvent
+
+                write_state(
+                    Path(temp_dir) / "state.json",
+                    MailwyrmState(
+                        messages={
+                            "msg-1": MessageRecord(
+                                id="msg-1",
+                                thread_id="thread-1",
+                                history_id="10",
+                                internal_date="1710000000000",
+                                label_ids=["TRASH"],
+                                snippet="Snippet",
+                                headers={"Subject": "Promo"},
+                            )
+                        },
+                        label_audit_events=[
+                            LabelAuditEvent(
+                                message_id="msg-1",
+                                action="trash_after_digest",
+                                label_names=["TRASH"],
+                                label_ids=["TRASH"],
+                                reason="Low-risk promotion.",
+                                classifier_version="rules-v0",
+                                created_at="2026-05-25T00:00:00+00:00",
+                            )
+                        ],
+                    ),
+                )
+
+                with patch.object(sys, "stdout", StringIO()) as stdout:
+                    result = actions_command(
+                        Namespace(actions_command="audit", limit=25)
+                    )
+
+        self.assertEqual(result, 0)
+        self.assertIn("Mailbox Action Audit", stdout.getvalue())
+        self.assertIn("msg-1\ttrash_after_digest\tTRASH\tPromo", stdout.getvalue())
 
     def test_digest_labels_apply_prints_preview_report_before_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

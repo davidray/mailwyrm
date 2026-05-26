@@ -9,9 +9,11 @@ from mailwyrm.actions import (
     ACTION_RESTORE_TRASH,
     ACTION_TRASH_AFTER_DIGEST,
     apply_archive_action_plans,
+    apply_trash_action_preview,
     build_action_plans,
     build_trash_preview,
     plan_action,
+    render_action_audit,
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
@@ -283,6 +285,27 @@ class ActionsTest(unittest.TestCase):
 
         self.assertEqual([plan.message.id for plan in preview.plans], ["msg-1"])
 
+    def test_build_trash_preview_respects_zero_limit(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+
+        preview = build_trash_preview(state, limit=0)
+
+        self.assertTrue(preview.policy_enabled)
+        self.assertEqual(preview.plans, [])
+
     def test_render_trash_preview_reports_policy_and_candidates(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", subject="Promo")},
@@ -378,6 +401,139 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(client.removed, [])
         self.assertEqual(state.messages["msg-1"].label_ids, [])
         self.assertEqual(state.label_audit_events, [])
+
+    def test_apply_trash_action_preview_uses_gmail_trash_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["INBOX", "Label_1"])},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+        preview = build_trash_preview(state)
+        client = FakeGmailClient()
+
+        result = apply_trash_action_preview(client, state, preview)
+
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.skipped_not_digested, 0)
+        self.assertEqual(client.trashed, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1", "TRASH"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_TRASH_AFTER_DIGEST)
+        self.assertEqual(state.label_audit_events[0].label_ids, ["TRASH"])
+        self.assertEqual(
+            state.label_audit_events[0].reason,
+            "Automated sender or subject pattern.",
+        )
+
+    def test_apply_trash_action_preview_skips_disabled_policy(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+        )
+        preview = build_trash_preview(state)
+        client = FakeGmailClient()
+
+        result = apply_trash_action_preview(client, state, preview)
+
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_policy_disabled, 1)
+        self.assertEqual(client.trashed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_apply_trash_action_preview_skips_already_trashed_messages(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["TRASH"])},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.94,
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[digest_event("msg-1")],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+        preview = build_trash_preview(state, mailbox="trash")
+        client = FakeGmailClient()
+
+        result = apply_trash_action_preview(client, state, preview)
+
+        self.assertEqual(preview.plans, [])
+        self.assertEqual(preview.skipped_already_trashed, 1)
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_already_trashed, 1)
+        self.assertEqual(client.trashed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["TRASH"])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_render_action_audit_reports_recent_events(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", subject="Receipt")},
+        )
+        state.label_audit_events.append(
+            label_event(
+                "msg-1",
+                action=ACTION_TRASH_AFTER_DIGEST,
+                label_names=["TRASH"],
+                reason="Low-risk machine mail.",
+            )
+        )
+
+        report = render_action_audit(state)
+
+        self.assertIn("Mailbox Action Audit", report)
+        self.assertIn("Total audit events: 1", report)
+        self.assertIn("Showing audit events: 1", report)
+        self.assertIn("msg-1\ttrash_after_digest\tTRASH\tReceipt", report)
+
+    def test_render_action_audit_reports_limited_display_count(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", subject="Receipt"),
+                "msg-2": message("msg-2", subject="Shipping"),
+            },
+        )
+        state.label_audit_events.extend(
+            [
+                label_event(
+                    "msg-1",
+                    action=ACTION_TRASH_AFTER_DIGEST,
+                    label_names=["TRASH"],
+                    reason="Low-risk machine mail.",
+                ),
+                label_event(
+                    "msg-2",
+                    action=ACTION_ARCHIVE_AFTER_DIGEST,
+                    label_names=["INBOX"],
+                    reason="Routine machine mail.",
+                ),
+            ]
+        )
+
+        report = render_action_audit(state, limit=1)
+
+        self.assertIn("Total audit events: 2", report)
+        self.assertIn("Showing audit events: 1", report)
 
     def test_restore_archived_message_adds_inbox_and_audits(self) -> None:
         state = MailwyrmState(
@@ -484,6 +640,7 @@ class FakeGmailClient:
         self.added: list[tuple[str, list[str]]] = []
         self.removed: list[tuple[str, list[str]]] = []
         self.modified: list[tuple[str, list[str], list[str]]] = []
+        self.trashed: list[str] = []
 
     def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
         self.added.append((message_id, label_ids))
@@ -500,6 +657,9 @@ class FakeGmailClient:
     ) -> None:
         self.modified.append((message_id, add_label_ids, remove_label_ids))
 
+    def trash_message(self, message_id: str) -> None:
+        self.trashed.append(message_id)
+
 
 def digest_event(message_id: str, classifier_version: str = "rules-v0"):
     return DigestAuditEvent(
@@ -507,6 +667,26 @@ def digest_event(message_id: str, classifier_version: str = "rules-v0"):
         digest_title_date="2026-05-25",
         reason="Automated sender or subject pattern.",
         classifier_version=classifier_version,
+        created_at="2026-05-25T00:00:00+00:00",
+    )
+
+
+def label_event(
+    message_id: str,
+    *,
+    action: str,
+    label_names: list[str],
+    reason: str,
+):
+    from mailwyrm.models import LabelAuditEvent
+
+    return LabelAuditEvent(
+        message_id=message_id,
+        action=action,
+        label_names=label_names,
+        label_ids=label_names,
+        reason=reason,
+        classifier_version="rules-v0",
         created_at="2026-05-25T00:00:00+00:00",
     )
 

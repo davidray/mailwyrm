@@ -48,7 +48,7 @@ It summarizes:
 
 - Indexed and classified message counts.
 - Digest audit events and recent digest dates.
-- Gmail mutation audit events for digested labels, archive, and archive restore.
+- Gmail mutation audit events for digested labels, archive, trash, archive restore, and trash restore.
 - Current mailbox action counts for protect, review, archive-after-digest, and trash-after-digest candidates.
 
 Example:
@@ -56,4 +56,11 @@ Example:
 ```sh
 uv run mailwyrm daily status
 uv run mailwyrm daily status --mailbox all-mail
+```
+
+For the most recent mutation-level rows, use:
+
+```sh
+uv run mailwyrm actions audit
+uv run mailwyrm actions audit --limit 100
 ```

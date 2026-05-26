@@ -9,8 +9,10 @@ from pathlib import Path
 from mailwyrm import __version__
 from mailwyrm.actions import (
     apply_archive_action_plans,
+    apply_trash_action_preview,
     build_action_plans,
     build_trash_preview,
+    render_action_audit,
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
@@ -399,6 +401,38 @@ def build_parser() -> argparse.ArgumentParser:
         choices=SYNC_MAILBOXES,
         default="inbox",
         help="Mailbox scope to apply. Defaults to inbox.",
+    )
+    actions_apply_trash_parser = actions_subparsers.add_parser(
+        "apply-trash",
+        help="Apply policy-gated trash_after_digest plans using Gmail's trash operation.",
+    )
+    actions_apply_trash_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    actions_apply_trash_parser.add_argument(
+        "--limit",
+        default=None,
+        type=int,
+        help="Max eligible trash plans to apply. Defaults to all eligible messages.",
+    )
+    actions_apply_trash_parser.add_argument(
+        "--mailbox",
+        choices=SYNC_MAILBOXES,
+        default="inbox",
+        help="Mailbox scope to apply. Defaults to inbox.",
+    )
+    actions_audit_parser = actions_subparsers.add_parser(
+        "audit",
+        help="Show local Gmail mutation audit events.",
+    )
+    actions_audit_parser.add_argument(
+        "--limit",
+        default=25,
+        type=int,
+        help="Max audit events to show. Defaults to 25.",
     )
     actions_restore_archive_parser = actions_subparsers.add_parser(
         "restore-archive",
@@ -827,6 +861,16 @@ def actions_command(args: argparse.Namespace) -> int:
             args.limit,
             args.mailbox,
         )
+    if args.actions_command == "apply-trash":
+        return actions_apply_trash_command(
+            args.client_secret,
+            args.limit,
+            args.mailbox,
+        )
+    if args.actions_command == "audit":
+        state = read_state(state_path())
+        print(render_action_audit(state, limit=args.limit))
+        return 0
     if args.actions_command == "restore-archive":
         return actions_restore_archive_command(args.client_secret, args.message_id)
     if args.actions_command == "restore-trash":
@@ -834,7 +878,7 @@ def actions_command(args: argparse.Namespace) -> int:
 
     print(
         "Choose `preview`, `preview-trash`, `apply-archive`, "
-        "`restore-archive`, or `restore-trash`.",
+        "`apply-trash`, `audit`, `restore-archive`, or `restore-trash`.",
         file=sys.stderr,
     )
     return 1
@@ -879,6 +923,62 @@ def actions_apply_archive_command(
         print(
             f"Skipped {result.skipped_not_digested} archive candidate(s) "
             "because they have not appeared in a digest yet."
+        )
+    return 0
+
+
+def actions_apply_trash_command(
+    client_secret: Path,
+    limit: int | None,
+    mailbox: str,
+) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
+    print(render_trash_preview(preview, mutates_gmail=bool(preview.plans)))
+    if not preview.plans:
+        if not preview.policy_enabled:
+            print("Trash policy is disabled; no Gmail trash actions were applied.")
+        else:
+            print("No messages are eligible for Gmail trash.")
+        return 0
+
+    client = GmailClient(token)
+    result = apply_trash_action_preview(client, state, preview)
+    write_state(state_path(), state)
+    print(f"Trashed {result.applied} message(s) using Gmail's trash operation.")
+    if result.skipped_policy_disabled:
+        print(
+            f"Skipped {result.skipped_policy_disabled} trash candidate(s) "
+            "because trash policy is disabled."
+        )
+    if result.skipped_not_digested:
+        print(
+            f"Skipped {result.skipped_not_digested} trash candidate(s) "
+            "because they have not appeared in a digest yet."
+        )
+    if result.skipped_already_trashed:
+        print(
+            f"Skipped {result.skipped_already_trashed} trash candidate(s) "
+            "because they are already in Gmail Trash."
         )
     return 0
 

@@ -41,6 +41,26 @@ Trash preview is gated by local automation policy and digest audit state. A mess
 
 If trash policy is disabled, the report says so and shows how many trash candidates were skipped by policy.
 
+## Trash Apply
+
+Mailwyrm can apply only policy-gated `trash_after_digest` plans:
+
+```sh
+uv run mailwyrm actions apply-trash --limit 10 --client-secret /path/to/client_secret.json
+```
+
+This command prints a trash report before mutating Gmail. The report says Gmail will be modified after the preview, then the command moves eligible messages to Gmail Trash by calling Gmail's trash operation.
+
+Trash apply is intentionally narrow. A message is eligible only when:
+
+- Local `trash_after_digest` policy is enabled.
+- The action planner chooses `trash_after_digest`.
+- The message has appeared in a local digest audit event.
+- The message is included by the selected mailbox scope.
+- The message is not already in Gmail Trash locally.
+
+Trash apply updates local labels to remove `INBOX`, add `TRASH`, and writes a local audit event. Restore with `mailwyrm actions restore-trash` if needed.
+
 ## Archive Apply
 
 Mailwyrm can apply only `archive_after_digest` plans:
@@ -109,5 +129,6 @@ The preview is intentionally conservative:
 - `trash_after_digest` only appears for low-importance machine mail with high automation safety, high confidence, and an explicit `trash` suggested action.
 - Archive apply skips messages that have not yet been recorded in a local digest audit event.
 - Trash preview skips messages unless local trash policy is enabled and the message has appeared in a local digest audit event.
+- Trash apply uses the same policy and digest gates as trash preview, skips messages already in Trash, and writes local audit events.
 
-Archive apply, archive restore, and trash restore write local audit events. A later trash command must require explicit local policy opt-in, Gmail confirmation, and an audit event before changing Gmail state. Use `mailwyrm policy status` to inspect the current policy boundary.
+Archive apply, trash apply, archive restore, and trash restore write local audit events. Use `mailwyrm actions audit` to inspect recent Gmail mutation audit events, and use `mailwyrm policy status` to inspect the current policy boundary.

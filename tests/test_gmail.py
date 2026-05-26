@@ -115,6 +115,27 @@ class GmailClientTest(unittest.TestCase):
         self.assertEqual(calls[0][1]["addLabelIds"], ["INBOX"])
         self.assertEqual(calls[0][1]["removeLabelIds"], ["TRASH"])
 
+    def test_trash_message_posts_trash_endpoint(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.modify",
+            )
+        )
+        calls = []
+
+        def fake_post(path, body):
+            calls.append((path, body))
+            return {}
+
+        client._post = fake_post
+
+        client.trash_message("msg 1/part")
+
+        self.assertEqual(calls[0][0], "/users/me/messages/msg%201%2Fpart/trash")
+        self.assertEqual(calls[0][1], {})
+
     def test_list_messages_omits_label_filter_when_label_ids_is_none(self) -> None:
         client = GmailClient(
             GmailToken(

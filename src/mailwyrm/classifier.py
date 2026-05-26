@@ -84,6 +84,14 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
         confidence = 0.74
         reason = "High-risk account, payment, security, legal, medical, or similar topic."
         suggested_actions = ["review", "protect"]
+    elif _is_github_copilot_notification(sender_address, text):
+        category = "machine"
+        machine_type = "notification"
+        importance = "low"
+        automation_safety = "high"
+        confidence = 0.94
+        reason = "Low-risk Copilot notification from GitHub."
+        suggested_actions = ["digest", "trash"]
     elif machine_score >= 2 and not human_reply_signal:
         category = "machine"
         machine_type = _machine_type(text)
@@ -143,6 +151,16 @@ def _machine_type(text: str) -> str | None:
     if _contains_any(text, ("security", "password", "verification code", "account recovery")):
         return "security"
     return "notification"
+
+
+def _is_github_copilot_notification(sender_address: str, text: str) -> bool:
+    return sender_address == "notifications@github.com" and _contains_any(
+        text,
+        (
+            "copilot",
+            "copilot-pull-request-reviewer",
+        ),
+    )
 
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:

@@ -23,10 +23,18 @@ uv run mailwyrm policy enable-trash-after-digest --confirm-trash-policy
 
 This writes local policy only. It does not call Gmail, trash messages, archive messages, label messages, or change message state.
 
-Trash automation remains behind an explicit trust boundary. A future trash command must require local policy opt-in before calling Gmail's trash operation.
+Trash automation remains behind an explicit trust boundary. Trash apply requires local policy opt-in before calling Gmail's trash operation.
 
 After policy opt-in, preview eligible trash candidates without mutating Gmail:
 
 ```sh
 uv run mailwyrm actions preview-trash --limit 10
 ```
+
+Apply eligible trash candidates:
+
+```sh
+uv run mailwyrm actions apply-trash --limit 10 --client-secret /path/to/client_secret.json
+```
+
+Trash apply prints the same policy-gated report before mutating Gmail. It only moves messages to Gmail Trash when policy is enabled, the planner chooses `trash_after_digest`, and the message has appeared in a local digest audit event.

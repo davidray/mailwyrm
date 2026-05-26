@@ -35,11 +35,20 @@ class ArchiveApplyResult:
 
 
 @dataclass(frozen=True)
+class TrashApplyResult:
+    applied: int = 0
+    skipped_policy_disabled: int = 0
+    skipped_not_digested: int = 0
+    skipped_already_trashed: int = 0
+
+
+@dataclass(frozen=True)
 class TrashPreview:
     plans: list[ActionPlan]
     policy_enabled: bool
     skipped_policy_disabled: int = 0
     skipped_not_digested: int = 0
+    skipped_already_trashed: int = 0
 
 
 def build_action_plans(
@@ -79,6 +88,12 @@ def build_trash_preview(
     limit: int | None = None,
     mailbox: str = "inbox",
 ) -> TrashPreview:
+    if limit == 0:
+        return TrashPreview(
+            plans=[],
+            policy_enabled=state.automation_policy.trash_after_digest_enabled,
+        )
+
     action_plans = build_action_plans(state, mailbox=mailbox)
     trash_plans = [
         plan for plan in action_plans if plan.action == ACTION_TRASH_AFTER_DIGEST
@@ -95,9 +110,13 @@ def build_trash_preview(
     }
     eligible_plans: list[ActionPlan] = []
     skipped_not_digested = 0
+    skipped_already_trashed = 0
     for plan in trash_plans:
         if plan.message.id not in digested_message_ids:
             skipped_not_digested += 1
+            continue
+        if GMAIL_TRASH_LABEL in plan.message.label_ids:
+            skipped_already_trashed += 1
             continue
         eligible_plans.append(plan)
         if limit is not None and len(eligible_plans) >= limit:
@@ -107,6 +126,7 @@ def build_trash_preview(
         plans=eligible_plans,
         policy_enabled=True,
         skipped_not_digested=skipped_not_digested,
+        skipped_already_trashed=skipped_already_trashed,
     )
 
 
@@ -205,10 +225,14 @@ def render_action_preview(
     return "\n".join(lines)
 
 
-def render_trash_preview(preview: TrashPreview) -> str:
+def render_trash_preview(
+    preview: TrashPreview,
+    *,
+    mutates_gmail: bool = False,
+) -> str:
     lines = [
         "Mailbox Trash Preview",
-        "No Gmail actions will be performed.",
+        _mutation_notice(mutates_gmail),
         "",
         f"Trash policy: {'enabled' if preview.policy_enabled else 'disabled'}",
     ]
@@ -219,6 +243,10 @@ def render_trash_preview(preview: TrashPreview) -> str:
     if preview.skipped_not_digested:
         lines.append(
             f"Skipped because not digested: {preview.skipped_not_digested}"
+        )
+    if preview.skipped_already_trashed:
+        lines.append(
+            f"Skipped because already in Trash: {preview.skipped_already_trashed}"
         )
 
     if not preview.plans:
@@ -238,6 +266,48 @@ def render_trash_preview(preview: TrashPreview) -> str:
                     f"{plan.classification.confidence:.2f}",
                     subject,
                     reason,
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def render_action_audit(state: MailwyrmState, *, limit: int = 25) -> str:
+    events = sorted(
+        state.label_audit_events,
+        key=lambda event: event.created_at,
+        reverse=True,
+    )
+    if limit >= 0:
+        events = events[:limit]
+
+    lines = [
+        "Mailbox Action Audit",
+        "",
+        f"Total audit events: {len(state.label_audit_events)}",
+        f"Showing audit events: {len(events)}",
+    ]
+    if not events:
+        lines.extend(["", "No Gmail mutation audit events yet."])
+        return "\n".join(lines)
+
+    lines.extend(["", "Created At\tMessage ID\tAction\tLabels\tSubject\tReason"])
+    for event in events:
+        message = state.messages.get(event.message_id)
+        subject = (
+            message.headers.get("Subject", "(no subject)")
+            if message
+            else "(message not in local index)"
+        )
+        lines.append(
+            "\t".join(
+                [
+                    event.created_at,
+                    event.message_id,
+                    event.action,
+                    _table_field(", ".join(event.label_names)),
+                    _table_field(subject),
+                    _table_field(event.reason),
                 ]
             )
         )
@@ -287,6 +357,60 @@ def apply_archive_action_plans(
     return ArchiveApplyResult(
         applied=applied,
         skipped_not_digested=skipped_not_digested,
+    )
+
+
+def apply_trash_action_preview(
+    client: GmailClient,
+    state: MailwyrmState,
+    preview: TrashPreview,
+) -> TrashApplyResult:
+    if not preview.policy_enabled:
+        return TrashApplyResult(
+            skipped_policy_disabled=preview.skipped_policy_disabled,
+            skipped_not_digested=preview.skipped_not_digested,
+            skipped_already_trashed=preview.skipped_already_trashed,
+        )
+
+    applied = 0
+    skipped_already_trashed = 0
+    for plan in preview.plans:
+        if GMAIL_TRASH_LABEL in plan.message.label_ids:
+            skipped_already_trashed += 1
+            continue
+
+        client.trash_message(plan.message.id)
+        label_ids = [
+            label_id
+            for label_id in plan.message.label_ids
+            if label_id != GMAIL_INBOX_LABEL
+        ]
+        if GMAIL_TRASH_LABEL not in label_ids:
+            label_ids.append(GMAIL_TRASH_LABEL)
+        state.messages[plan.message.id] = replace(
+            plan.message,
+            label_ids=label_ids,
+        )
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=plan.message.id,
+                action=ACTION_TRASH_AFTER_DIGEST,
+                label_names=[GMAIL_TRASH_LABEL],
+                label_ids=[GMAIL_TRASH_LABEL],
+                reason=plan.classification.reason,
+                classifier_version=plan.classification.classifier_version,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        applied += 1
+
+    return TrashApplyResult(
+        applied=applied,
+        skipped_policy_disabled=preview.skipped_policy_disabled,
+        skipped_not_digested=preview.skipped_not_digested,
+        skipped_already_trashed=(
+            preview.skipped_already_trashed + skipped_already_trashed
+        ),
     )
 
 
@@ -388,6 +512,8 @@ def _is_protected(classification: ClassificationRecord) -> bool:
 def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
     if mailbox == "all-mail":
         return True
+    if mailbox == "trash":
+        return GMAIL_TRASH_LABEL in message.label_ids
     return GMAIL_INBOX_LABEL in message.label_ids
 
 

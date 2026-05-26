@@ -65,6 +65,37 @@ class ClassifierTest(unittest.TestCase):
         self.assertEqual(classification.category, "human")
         self.assertIsNone(classification.machine_type)
 
+    def test_classifies_github_copilot_notifications_as_trash_candidates(self) -> None:
+        classification = classify_message(
+            message(
+                sender="GitHub <notifications@github.com>",
+                subject="Re: [davidray/mailwyrm] Add policy-gated trash apply",
+                snippet="copilot-pull-request-reviewer commented on this pull request.",
+            )
+        )
+
+        self.assertEqual(classification.category, "machine")
+        self.assertEqual(classification.machine_type, "notification")
+        self.assertEqual(classification.importance, "low")
+        self.assertEqual(classification.automation_safety, "high")
+        self.assertGreaterEqual(classification.confidence, 0.9)
+        self.assertIn("digest", classification.suggested_actions)
+        self.assertIn("trash", classification.suggested_actions)
+
+    def test_high_risk_github_copilot_notifications_still_protected(self) -> None:
+        classification = classify_message(
+            message(
+                sender="GitHub <notifications@github.com>",
+                subject="Security alert from Copilot",
+                snippet="copilot-pull-request-reviewer mentioned account security.",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.importance, "high")
+        self.assertEqual(classification.automation_safety, "low")
+        self.assertIn("protect", classification.suggested_actions)
+
 
 if __name__ == "__main__":
     unittest.main()

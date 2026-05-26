@@ -5,6 +5,7 @@ from mailwyrm.actions import (
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_RESTORE_ARCHIVE,
+    ACTION_RESTORE_TRASH,
     ACTION_TRASH_AFTER_DIGEST,
     GMAIL_INBOX_LABEL,
     build_action_plans,
@@ -95,6 +96,16 @@ def render_daily_status(state: MailwyrmState, *, mailbox: str = "inbox") -> str:
         for event in state.label_audit_events
         if event.action == ACTION_RESTORE_ARCHIVE
     ]
+    trashed_events = [
+        event
+        for event in state.label_audit_events
+        if event.action == ACTION_TRASH_AFTER_DIGEST
+    ]
+    restored_trash_events = [
+        event
+        for event in state.label_audit_events
+        if event.action == ACTION_RESTORE_TRASH
+    ]
 
     lines = [
         "# Mailwyrm Daily Status",
@@ -115,6 +126,8 @@ def render_daily_status(state: MailwyrmState, *, mailbox: str = "inbox") -> str:
         f"Digested label events: {len(digested_label_events)}",
         f"Archive events: {len(archived_events)}",
         f"Restore archive events: {len(restored_events)}",
+        f"Trash events: {len(trashed_events)}",
+        f"Restore trash events: {len(restored_trash_events)}",
         f"Last Gmail mutation audit: {last_label_action_at}",
         "",
         "## Current Mailbox Plan",

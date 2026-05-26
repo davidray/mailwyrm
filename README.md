@@ -34,6 +34,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Mailbox action preview](docs/mailbox-action-preview.md): preview archive, keep, protect, review, or `trash_after_digest` plans without mutating Gmail.
 - [Daily workflow](docs/daily-preview.md): preview, apply, and status commands for the daily machine-mail workflow.
 - [Automation policy](docs/automation-policy.md): local policy status for archive and trash trust boundaries.
+- [Todo](docs/todo.md): durable follow-up work before the first user experience.
 
 ## Development
 

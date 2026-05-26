@@ -123,6 +123,12 @@ class GmailClient:
             },
         )
 
+    def trash_message(self, message_id: str) -> None:
+        self._post(
+            f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/trash",
+            {},
+        )
+
     def _get(self, path: str) -> dict[str, Any]:
         return self._request(f"{GMAIL_API_BASE}{path}")
 
