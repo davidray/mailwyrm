@@ -1,8 +1,8 @@
 # App Shell
 
-`mailwyrm app` runs the first read-only local Mailwyrm application.
+`mailwyrm app` runs the first local Mailwyrm application.
 
-It serves a browser dashboard for the daily cockpit from local state. It does not call Gmail, mutate local state, classify mail, apply labels, archive messages, or move messages to Trash.
+It serves a browser dashboard for the daily cockpit from local state. It can classify locally indexed messages into Mailwyrm state, but it does not call Gmail, apply labels, archive messages, or move messages to Trash.
 
 Example:
 
@@ -18,6 +18,7 @@ The app exposes:
 - `/`: the dashboard UI.
 - `/api/daily-cockpit`: structured JSON for the same daily cockpit data.
 - `/api/workflow-preview`: read-only local reports for preview workflows.
+- `/api/local-classify`: local-only classification for indexed messages.
 - `/healthz`: a lightweight health check.
 
 ## Current Scope
@@ -38,8 +39,9 @@ It shows:
   classification, daily preview, label application, archive, and trash.
 - In-app read-only preview reports for daily preview, label preview, mailbox
   action preview, and trash preview.
+- In-app local classification for indexed messages in the selected mailbox scope.
 - Useful CLI commands for the next explicit workflow step.
 
 ## Trust Boundary
 
-The app is read-only. It may render local preview reports from indexed Mailwyrm state, but it does not call Gmail, write local state, classify mail, apply labels, archive messages, or move messages to Trash. Gmail remains the source of truth, and mailbox mutation still happens through explicit CLI commands that print their preview reports before applying changes.
+The app can write local Mailwyrm classification state for indexed messages. It may also render local preview reports from indexed Mailwyrm state. It does not call Gmail, apply labels, archive messages, move messages to Trash, or otherwise mutate mailbox state. Gmail remains the source of truth, and mailbox mutation still happens through explicit CLI commands that print their preview reports before applying changes.

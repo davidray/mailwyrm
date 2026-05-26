@@ -5,6 +5,7 @@ const state = {
 };
 
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
+const localActionWorkflows = new Set(["classify"]);
 
 const els = {
   mailbox: document.querySelector("#mailbox"),
@@ -269,6 +270,9 @@ function workflowCard(workflow) {
   commands.push(commandRow(primaryLabel(workflow), command));
 
   const controls = [];
+  if (localActionWorkflows.has(workflow.id)) {
+    controls.push(localActionButton(workflow));
+  }
   if (previewableWorkflows.has(workflow.id)) {
     controls.push(previewButton(workflow));
   }
@@ -286,6 +290,39 @@ function workflowCard(workflow) {
     controls.length ? div("div", { class: "workflow-actions" }, controls) : "",
     div("div", { class: "workflow-commands" }, commands),
   ]);
+}
+
+function localActionButton(workflow) {
+  const button = div("button", { type: "button", class: "run-local-action" }, "Run classify");
+  button.addEventListener("click", () => runLocalAction(workflow.id, button));
+  return button;
+}
+
+async function runLocalAction(workflowId, button) {
+  const params = new URLSearchParams({
+    mailbox: state.mailbox,
+    limit: String(state.limit),
+  });
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Running";
+  try {
+    const response = await fetch(`/api/local-classify?${params}`, {
+      method: "POST",
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderPreviewError(payload.error || "Unable to run local action.");
+      return;
+    }
+    renderLocalActionResult(payload);
+    await loadCockpit();
+  } catch (error) {
+    renderPreviewError(error.message || "Unable to run local action.");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
 }
 
 function previewButton(workflow) {
@@ -322,6 +359,21 @@ async function loadWorkflowPreview(workflowId, button) {
 function renderWorkflowPreview(payload) {
   els.previewTitle.textContent = payload.title;
   els.previewReport.textContent = payload.report;
+  els.previewPanel.hidden = false;
+  els.previewPanel.scrollIntoView({ block: "start" });
+}
+
+function renderLocalActionResult(payload) {
+  els.previewTitle.textContent = payload.title;
+  els.previewReport.textContent = [
+    payload.message,
+    "",
+    `Mailbox: ${payload.mailbox}`,
+    `Matched messages: ${payload.matched_messages}`,
+    `Classified locally: ${payload.classified_messages}`,
+    `Already classified: ${payload.skipped_already_classified}`,
+    "Gmail was not modified.",
+  ].join("\n");
   els.previewPanel.hidden = false;
   els.previewPanel.scrollIntoView({ block: "start" });
 }

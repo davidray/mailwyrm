@@ -344,7 +344,8 @@ th {
   gap: 8px;
 }
 
-.preview-workflow {
+.preview-workflow,
+.run-local-action {
   width: 100%;
 }
 

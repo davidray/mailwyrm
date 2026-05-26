@@ -6,6 +6,7 @@ from mailwyrm.app import (
     _query_mailbox,
     _query_workflow,
     build_workflow_preview_payload,
+    classify_local_messages,
     create_app_server,
 )
 from mailwyrm.models import (
@@ -56,7 +57,9 @@ class AppTest(unittest.TestCase):
         self.assertIn("copy-command", static_root.joinpath("app.js").read_text())
         self.assertIn("workflow-status", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/workflow-preview", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/local-classify", static_root.joinpath("app.js").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
+        self.assertIn("run-local-action", static_root.joinpath("app.js").read_text())
 
     def test_query_int_accepts_zero_and_positive_values(self) -> None:
         self.assertEqual(_query_int({"limit": ["0"]}, "limit", 25), 0)
@@ -176,3 +179,46 @@ class AppTest(unittest.TestCase):
         self.assertEqual(payload["title"], "Trash Policy Preview")
         self.assertIn("Trash policy: enabled", payload["report"])
         self.assertIn("trash_after_digest", payload["report"])
+
+    def test_classify_local_messages_classifies_unclassified_mailbox_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Receipt"),
+                "msg-2": message("msg-2", "Already done"),
+            },
+            classifications={"msg-2": classification("msg-2")},
+        )
+
+        result = classify_local_messages(state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertEqual(result["skipped_already_classified"], 1)
+        self.assertFalse(result["mutates_gmail"])
+        self.assertIn("msg-1", state.classifications)
+
+    def test_classify_local_messages_respects_mailbox_and_limit(self) -> None:
+        inbox = message("msg-1", "Inbox")
+        archived = MessageRecord(
+            id="msg-2",
+            thread_id="thread-msg-2",
+            history_id="10",
+            internal_date="1710000000001",
+            label_ids=[],
+            snippet="Snippet",
+            headers={"From": "Sender <sender@example.com>", "Subject": "Archived"},
+        )
+        state = MailwyrmState(messages={"msg-1": inbox, "msg-2": archived})
+
+        result = classify_local_messages(state, mailbox="all-mail", limit=1)
+
+        self.assertEqual(result["matched_messages"], 1)
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertIn("msg-2", state.classifications)
+        self.assertNotIn("msg-1", state.classifications)
+
+    def test_classify_local_messages_rejects_invalid_inputs(self) -> None:
+        with self.assertRaises(ValueError):
+            classify_local_messages(MailwyrmState(), mailbox="spam")
+
+        with self.assertRaises(ValueError):
+            classify_local_messages(MailwyrmState(), limit=-1)
