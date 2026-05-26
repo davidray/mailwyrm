@@ -207,6 +207,8 @@ class AutomationPolicy:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AutomationPolicy":
+        if not isinstance(data, dict):
+            data = {}
         return cls(
             archive_after_digest_enabled=_policy_bool(
                 data.get("archive_after_digest_enabled"),

@@ -32,6 +32,12 @@ class PolicyTest(unittest.TestCase):
         self.assertFalse(policy.archive_after_digest_enabled)
         self.assertFalse(policy.trash_after_digest_enabled)
 
+    def test_policy_defaults_when_local_state_value_is_not_an_object(self) -> None:
+        policy = AutomationPolicy.from_dict(None)
+
+        self.assertTrue(policy.archive_after_digest_enabled)
+        self.assertFalse(policy.trash_after_digest_enabled)
+
 
 if __name__ == "__main__":
     unittest.main()
