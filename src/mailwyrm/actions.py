@@ -14,8 +14,10 @@ ACTION_REVIEW = "review"
 ACTION_PROTECT = "protect"
 ACTION_ARCHIVE_AFTER_DIGEST = "archive_after_digest"
 ACTION_RESTORE_ARCHIVE = "restore_archive"
+ACTION_RESTORE_TRASH = "restore_trash"
 ACTION_TRASH_AFTER_DIGEST = "trash_after_digest"
 GMAIL_INBOX_LABEL = "INBOX"
+GMAIL_TRASH_LABEL = "TRASH"
 
 
 @dataclass(frozen=True)
@@ -312,6 +314,50 @@ def restore_archived_message(
             label_names=[GMAIL_INBOX_LABEL],
             label_ids=[GMAIL_INBOX_LABEL],
             reason="User restored archived message to inbox.",
+            classifier_version=(
+                classification.classifier_version if classification else "manual"
+            ),
+            created_at=datetime.now(UTC).isoformat(),
+        )
+    )
+    return True
+
+
+def restore_trashed_message(
+    client: GmailClient,
+    state: MailwyrmState,
+    message_id: str,
+) -> bool:
+    message = state.messages.get(message_id)
+    if message is None:
+        raise ValueError(f"message {message_id} is not in the local index")
+    if GMAIL_TRASH_LABEL not in message.label_ids:
+        return False
+
+    add_label_ids = []
+    if GMAIL_INBOX_LABEL not in message.label_ids:
+        add_label_ids.append(GMAIL_INBOX_LABEL)
+    client.modify_message_labels(
+        message_id,
+        add_label_ids=add_label_ids,
+        remove_label_ids=[GMAIL_TRASH_LABEL],
+    )
+
+    label_ids = [
+        label_id for label_id in message.label_ids if label_id != GMAIL_TRASH_LABEL
+    ]
+    if GMAIL_INBOX_LABEL not in label_ids:
+        label_ids.append(GMAIL_INBOX_LABEL)
+    state.messages[message_id] = replace(message, label_ids=label_ids)
+
+    classification = state.classifications.get(message_id)
+    state.label_audit_events.append(
+        LabelAuditEvent(
+            message_id=message_id,
+            action=ACTION_RESTORE_TRASH,
+            label_names=[GMAIL_TRASH_LABEL, GMAIL_INBOX_LABEL],
+            label_ids=[GMAIL_TRASH_LABEL, GMAIL_INBOX_LABEL],
+            reason="User restored trashed message to inbox.",
             classifier_version=(
                 classification.classifier_version if classification else "manual"
             ),

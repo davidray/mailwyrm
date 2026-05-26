@@ -71,6 +71,18 @@ This re-adds Gmail's `INBOX` label, updates the local message labels, and writes
 
 The message must already exist in the local Mailwyrm index. If Gmail has changed independently, run sync again to refresh local labels from Gmail.
 
+## Trash Restore
+
+Mailwyrm can restore a previously trashed local message to the Gmail inbox by message ID:
+
+```sh
+uv run mailwyrm actions restore-trash <gmail-message-id> --client-secret /path/to/client_secret.json
+```
+
+This removes Gmail's `TRASH` label, adds Gmail's `INBOX` label when needed, updates the local message labels, and writes a local audit event. It does not remove Mailwyrm classification labels or change the message's classification.
+
+The message must already exist in the local Mailwyrm index and must currently have the `TRASH` label locally. If Gmail has changed independently, run sync again to refresh local labels from Gmail.
+
 ## Action Vocabulary
 
 - `keep`: human correspondence should stay foregrounded.
@@ -91,4 +103,4 @@ The preview is intentionally conservative:
 - Archive apply skips messages that have not yet been recorded in a local digest audit event.
 - Trash preview skips messages unless local trash policy is enabled and the message has appeared in a local digest audit event.
 
-Archive apply and archive restore write local audit events. A later trash command must require explicit local policy opt-in, Gmail confirmation, and an audit event before changing Gmail state. Use `mailwyrm policy status` to inspect the current policy boundary.
+Archive apply, archive restore, and trash restore write local audit events. A later trash command must require explicit local policy opt-in, Gmail confirmation, and an audit event before changing Gmail state. Use `mailwyrm policy status` to inspect the current policy boundary.

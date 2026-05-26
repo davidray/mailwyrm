@@ -92,20 +92,31 @@ class GmailClient:
         return ensured
 
     def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
-        self._post(
-            f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
-            {
-                "addLabelIds": label_ids,
-                "removeLabelIds": [],
-            },
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=label_ids,
+            remove_label_ids=[],
         )
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=[],
+            remove_label_ids=label_ids,
+        )
+
+    def modify_message_labels(
+        self,
+        message_id: str,
+        *,
+        add_label_ids: list[str],
+        remove_label_ids: list[str],
+    ) -> None:
         self._post(
             f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
             {
-                "addLabelIds": [],
-                "removeLabelIds": label_ids,
+                "addLabelIds": add_label_ids,
+                "removeLabelIds": remove_label_ids,
             },
         )
 

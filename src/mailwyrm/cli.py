@@ -14,6 +14,7 @@ from mailwyrm.actions import (
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
+    restore_trashed_message,
 )
 from mailwyrm.classifier import classify_message
 from mailwyrm.config import state_path, token_path
@@ -402,6 +403,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Gmail message ID to restore to the inbox.",
     )
     actions_restore_archive_parser.add_argument(
+        "--client-secret",
+        required=True,
+        type=Path,
+        help="Path to a Google OAuth client secret JSON file for token refresh.",
+    )
+    actions_restore_trash_parser = actions_subparsers.add_parser(
+        "restore-trash",
+        help="Restore a trashed message by removing TRASH and adding INBOX.",
+    )
+    actions_restore_trash_parser.add_argument(
+        "message_id",
+        help="Gmail message ID to restore to the inbox.",
+    )
+    actions_restore_trash_parser.add_argument(
         "--client-secret",
         required=True,
         type=Path,
@@ -801,9 +816,12 @@ def actions_command(args: argparse.Namespace) -> int:
         )
     if args.actions_command == "restore-archive":
         return actions_restore_archive_command(args.client_secret, args.message_id)
+    if args.actions_command == "restore-trash":
+        return actions_restore_trash_command(args.client_secret, args.message_id)
 
     print(
-        "Choose `preview`, `preview-trash`, `apply-archive`, or `restore-archive`.",
+        "Choose `preview`, `preview-trash`, `apply-archive`, "
+        "`restore-archive`, or `restore-trash`.",
         file=sys.stderr,
     )
     return 1
@@ -885,6 +903,45 @@ def actions_restore_archive_command(client_secret: Path, message_id: str) -> int
         print(f"Restored {message_id} to inbox by adding Gmail's INBOX label.")
     else:
         print(f"Message {message_id} is already in the inbox.")
+    return 0
+
+
+def actions_restore_trash_command(client_secret: Path, message_id: str) -> int:
+    token = read_token(token_path())
+    if token is None:
+        print(
+            "No Gmail token found. Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+    if GMAIL_MODIFY_SCOPE not in token.scope.split():
+        print(
+            "Stored Gmail token does not include gmail.modify. "
+            "Run `mailwyrm auth --scope modify` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+
+    state = read_state(state_path())
+    client = GmailClient(token)
+    try:
+        restored = restore_trashed_message(client, state, message_id)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    write_state(state_path(), state)
+    if restored:
+        print(
+            f"Restored {message_id} from trash to inbox by removing Gmail's "
+            "TRASH label and adding INBOX."
+        )
+    else:
+        print(f"Message {message_id} is not in trash.")
     return 0
 
 
