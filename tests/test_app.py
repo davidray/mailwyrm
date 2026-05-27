@@ -174,6 +174,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("bundle-got-it", static_root.joinpath("app.css").read_text())
         self.assertIn("reviewResolutionSection", static_root.joinpath("app.js").read_text())
         self.assertIn("inlineReviewControls", static_root.joinpath("app.js").read_text())
+        self.assertIn("renderContextFeedback", static_root.joinpath("app.js").read_text())
+        self.assertIn("context-feedback", static_root.joinpath("app.css").read_text())
         self.assertIn("User resolved this from the Review card.", static_root.joinpath("app.js").read_text())
         self.assertIn("machineTypeLabel", static_root.joinpath("app.js").read_text())
         self.assertIn("Spam", static_root.joinpath("app.js").read_text())

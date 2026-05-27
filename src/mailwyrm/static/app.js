@@ -1042,22 +1042,58 @@ async function saveReviewResolution({
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to save review resolution.");
+      renderContextFeedback(button, {
+        title: "Resolution failed",
+        message: payload.error || "Unable to save review resolution.",
+        tone: "error",
+      });
       return;
     }
     if (renderDetail) {
       renderMessageDetail(payload.detail);
     }
     if (showResult) {
-      renderLocalMutationResult(payload);
+      renderContextFeedback(button, {
+        title: payload.title,
+        message: payload.message,
+        tone: "success",
+      });
     }
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to save review resolution.");
+    renderContextFeedback(button, {
+      title: "Resolution failed",
+      message: error.message || "Unable to save review resolution.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
   }
+}
+
+function renderContextFeedback(target, { title, message, tone }) {
+  const container =
+    target.closest(".review-resolution") ||
+    target.closest(".item") ||
+    target.closest(".machine-bundle");
+  if (!container) {
+    return;
+  }
+  container.querySelector(".context-feedback")?.remove();
+  const feedback = div("div", { class: `context-feedback ${tone}` }, [
+    div("strong", {}, title),
+    div("p", {}, message),
+  ]);
+  const controls =
+    target.closest(".resolution-controls") ||
+    target.closest(".inline-review-controls") ||
+    target.closest(".item-actions");
+  if (controls) {
+    controls.insertAdjacentElement("afterend", feedback);
+    return;
+  }
+  container.append(feedback);
 }
 
 function auditSection(events) {
