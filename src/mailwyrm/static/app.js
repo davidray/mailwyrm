@@ -11,7 +11,7 @@ const reviewMachineTypes = [
   ["marketing", "Marketing"],
   ["transactional", "Transactional"],
   ["news", "News"],
-  ["product_community", "Product Community"],
+  ["product_community", "Community"],
   ["spam", "Spam"],
 ];
 

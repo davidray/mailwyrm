@@ -204,7 +204,7 @@ def _section_title(section: str) -> str:
         "transactional": "Transactional",
         "news": "News",
         "spam": "Spam",
-        "product_community": "Product Community",
+        "product_community": "Community",
         # Legacy section names from earlier local state.
         "delivery": "Deliveries",
         "newsletter": "Newsletters",
