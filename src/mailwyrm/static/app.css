@@ -525,6 +525,12 @@ button:disabled {
   color: #9f2d20;
 }
 
+.undo-complete {
+  border-color: #d6b76a;
+  background: #fff8df;
+  color: #7a5200;
+}
+
 .context-feedback {
   display: grid;
   gap: 4px;

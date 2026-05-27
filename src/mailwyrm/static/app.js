@@ -4,8 +4,10 @@ const state = {
   auditLimit: 10,
   activeTab: "people",
   refreshTimer: null,
+  completeTimers: new Map(),
 };
 
+const COMPLETE_UNDO_DELAY_MS = 5000;
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
 const appActionEndpoints = {
   sync: "/api/gmail-sync",
@@ -903,14 +905,54 @@ function completeConversationButton(item) {
     },
     "Complete"
   );
-  button.addEventListener("click", () => completeConversation(item, button));
+  button.addEventListener("click", () => scheduleCompleteConversation(item, button));
   return button;
+}
+
+function scheduleCompleteConversation(item, button) {
+  const pendingKey = item.thread_id || item.message_id;
+  if (state.completeTimers.has(pendingKey)) {
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Completing in 5s";
+  const undo = div(
+    "button",
+    {
+      type: "button",
+      class: "undo-complete",
+      title: "Cancel completing this conversation.",
+    },
+    "Undo"
+  );
+  button.insertAdjacentElement("afterend", undo);
+
+  const timer = window.setTimeout(() => {
+    state.completeTimers.delete(pendingKey);
+    undo.remove();
+    completeConversation(item, button);
+  }, COMPLETE_UNDO_DELAY_MS);
+
+  state.completeTimers.set(pendingKey, { timer, button, undo });
+  undo.addEventListener("click", () => undoCompleteConversation(pendingKey));
+}
+
+function undoCompleteConversation(pendingKey) {
+  const pending = state.completeTimers.get(pendingKey);
+  if (!pending) {
+    return;
+  }
+  window.clearTimeout(pending.timer);
+  state.completeTimers.delete(pendingKey);
+  pending.undo.remove();
+  pending.button.disabled = false;
+  pending.button.textContent = "Complete";
 }
 
 async function completeConversation(item, button) {
   const previousText = button.textContent;
   button.disabled = true;
-  button.textContent = "Completing";
+  button.textContent = "Archiving";
   try {
     const response = await fetch("/api/conversation-complete", {
       method: "POST",
@@ -925,15 +967,23 @@ async function completeConversation(item, button) {
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to complete conversation.");
+      renderContextFeedback(button, {
+        title: "Complete failed",
+        message: payload.error || "Unable to complete conversation.",
+        tone: "error",
+      });
       return;
     }
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to complete conversation.");
+    renderContextFeedback(button, {
+      title: "Complete failed",
+      message: error.message || "Unable to complete conversation.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
-    button.textContent = previousText;
+    button.textContent = previousText === "Completing in 5s" ? "Complete" : previousText;
   }
 }
 
