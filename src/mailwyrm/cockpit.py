@@ -481,6 +481,7 @@ def _attention_lanes(
         "needs_review": {
             "total_items": 0,
             "showing_items": 0,
+            "review_types": {},
             "items": [],
         },
     }
@@ -505,6 +506,12 @@ def _attention_lanes(
 
         lane = lanes[lane_name]
         lane["total_items"] += 1
+        if lane_name == "needs_review":
+            review_type = _review_type_payload(classification)
+            if review_type is not None:
+                lane["review_types"][review_type] = (
+                    lane["review_types"].get(review_type, 0) + 1
+                )
         if limit is None or lane["showing_items"] < limit:
             lane["items"].append(
                 _lane_item_payload(
@@ -539,6 +546,7 @@ def _digest_item_payload(item) -> dict[str, Any]:
         "snippet": _clean_snippet(message.snippet),
         "category": classification.category,
         "machine_type": classification.machine_type,
+        "review_type": _review_type_payload(classification),
         "importance": classification.importance,
         "automation_safety": classification.automation_safety,
         "confidence": classification.confidence,
@@ -563,6 +571,7 @@ def _lane_item_payload(
         "snippet": _clean_snippet(message.snippet),
         "category": classification.category,
         "machine_type": classification.machine_type,
+        "review_type": _review_type_payload(classification),
         "importance": classification.importance,
         "automation_safety": classification.automation_safety,
         "confidence": classification.confidence,
@@ -580,6 +589,7 @@ def _action_plan_payload(plan, *, mailbox: str) -> dict[str, Any]:
         "sender": _header(plan.message, "From", "(unknown sender)"),
         "category": plan.classification.category,
         "machine_type": plan.classification.machine_type,
+        "review_type": _review_type_payload(plan.classification),
         "confidence": plan.classification.confidence,
         "action": plan.action,
         "reason": plan.reason,
@@ -590,6 +600,7 @@ def _classification_payload(classification) -> dict[str, Any]:
     return {
         "category": classification.category,
         "machine_type": classification.machine_type,
+        "review_type": _review_type_payload(classification),
         "importance": classification.importance,
         "automation_safety": classification.automation_safety,
         "confidence": classification.confidence,
@@ -610,6 +621,12 @@ def _audit_event_payload(state: MailwyrmState, event) -> dict[str, Any]:
         "subject": _header(message, "Subject", "(message not in local index)"),
         "reason": event.reason,
     }
+
+
+def _review_type_payload(classification) -> str | None:
+    if classification.category != "needs_review":
+        return None
+    return classification.review_type or "unknown"
 
 
 def _header(message, name: str, fallback: str) -> str:

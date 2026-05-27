@@ -13,6 +13,9 @@ It intentionally does not write Gmail labels, archive, trash, or mutate mailbox 
 - Exposes classifications through the CLI.
 - Classifies machine mail into durable `machine_type` buckets:
   `marketing`, `transactional`, `news`, `spam`, and `product_community`.
+- Classifies review mail into durable `review_type` buckets: `security`,
+  `finance`, `legal`, `medical`, `account_access`, `travel`, `possible_human`,
+  `uncertain_machine`, and `unknown`.
 
 ## Commands
 
@@ -28,6 +31,7 @@ Each classification stores:
 
 - `category`
 - `machine_type`
+- `review_type`
 - `importance`
 - `automation_safety`
 - `confidence`

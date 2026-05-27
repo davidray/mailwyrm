@@ -27,6 +27,7 @@ def classification(message_id: str = "msg-1") -> ClassificationRecord:
         message_id=message_id,
         category="needs_review",
         machine_type=None,
+        review_type="unknown",
         importance="medium",
         automation_safety="low",
         confidence=0.55,
@@ -109,6 +110,7 @@ class CorrectionsTest(unittest.TestCase):
 
         self.assertEqual(effective.category, "machine")
         self.assertEqual(effective.machine_type, "news")
+        self.assertIsNone(effective.review_type)
         self.assertEqual(effective.confidence, 1.0)
         self.assertEqual(effective.reason, "Known news.")
         self.assertEqual(effective.classifier_version, "rules-v0+user-correction")

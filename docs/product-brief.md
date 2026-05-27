@@ -49,6 +49,12 @@ to treat the message, not merely which system generated it.
 
 Machine does not mean unimportant. A bank fraud alert is machine correspondence, but it should be treated as high importance and low automation safety.
 
+Needs-review mail should also be structured. Useful review buckets include
+security, finance, legal, medical, account access, travel, possible human,
+uncertain machine, and unknown. These buckets help the app explain why mail is
+protected before the user resolves it into human correspondence, machine
+correspondence, or a durable policy.
+
 ## Daily Machine Digest
 
 The digest should be structured rather than a flat list of summaries.

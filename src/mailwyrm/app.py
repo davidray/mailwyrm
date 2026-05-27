@@ -380,11 +380,12 @@ def classify_local_messages(
         if not message_matches_mailbox(message, mailbox):
             continue
         matched += 1
-        if message.id in state.classifications:
-            skipped_already_classified += 1
-        else:
+        classification = state.classifications.get(message.id)
+        if classification is None or _needs_review_type_refresh(classification):
             state.classifications[message.id] = classify_message(message)
             classified += 1
+        else:
+            skipped_already_classified += 1
         if limit is not None and matched >= limit:
             break
 
@@ -402,3 +403,7 @@ def classify_local_messages(
             f"Skipped {skipped_already_classified} already-classified message(s)."
         ),
     }
+
+
+def _needs_review_type_refresh(classification) -> bool:
+    return classification.category == "needs_review" and classification.review_type is None

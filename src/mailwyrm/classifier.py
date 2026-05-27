@@ -24,6 +24,34 @@ HIGH_RISK_TERMS = (
     "verification code",
 )
 
+FINANCE_REVIEW_TERMS = (
+    "bank",
+    "card",
+    "fraud",
+    "invoice",
+    "payment",
+    "tax",
+)
+
+LEGAL_REVIEW_TERMS = ("legal", "lawsuit", "contract", "court")
+MEDICAL_REVIEW_TERMS = ("medical", "health", "doctor", "clinic", "insurance")
+SECURITY_REVIEW_TERMS = ("security", "verification code")
+ACCOUNT_ACCESS_REVIEW_TERMS = (
+    "account recovery",
+    "password",
+    "reset your password",
+    "sign-in",
+    "login",
+)
+TRAVEL_REVIEW_TERMS = (
+    "flight",
+    "hotel",
+    "reservation",
+    "boarding",
+    "itinerary",
+    "travel",
+)
+
 MACHINE_SENDER_TERMS = (
     "alert",
     "billing",
@@ -84,6 +112,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     if high_risk:
         category = "needs_review"
         machine_type = None
+        review_type = _review_type(text, human_reply_signal=human_reply_signal)
         importance = "high"
         automation_safety = "low"
         confidence = 0.74
@@ -92,6 +121,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     elif _is_github_copilot_notification(sender_address, text):
         category = "machine"
         machine_type = "product_community"
+        review_type = None
         importance = "low"
         automation_safety = "high"
         confidence = 0.94
@@ -100,6 +130,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     elif machine_score >= 2 and not human_reply_signal:
         category = "machine"
         machine_type = _machine_type(text)
+        review_type = None
         importance = "medium" if machine_type == "transactional" else "low"
         automation_safety = "high" if machine_type == "spam" else "medium"
         confidence = min(0.95, 0.62 + (machine_score * 0.1))
@@ -108,6 +139,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     elif human_reply_signal:
         category = "human"
         machine_type = None
+        review_type = None
         importance = "medium"
         automation_safety = "low"
         confidence = 0.68
@@ -116,6 +148,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
     else:
         category = "needs_review"
         machine_type = None
+        review_type = _review_type(text, human_reply_signal=human_reply_signal)
         importance = "medium"
         automation_safety = "low"
         confidence = 0.55
@@ -132,6 +165,7 @@ def classify_message(message: MessageRecord) -> ClassificationRecord:
         reason=reason,
         suggested_actions=suggested_actions,
         classifier_version=CLASSIFIER_VERSION,
+        review_type=review_type,
     )
 
 
@@ -206,6 +240,26 @@ def _machine_type(text: str) -> str | None:
     ):
         return "marketing"
     return "transactional"
+
+
+def _review_type(text: str, *, human_reply_signal: bool) -> str:
+    if human_reply_signal:
+        return "possible_human"
+    if _contains_any(text, ACCOUNT_ACCESS_REVIEW_TERMS):
+        return "account_access"
+    if _contains_any(text, SECURITY_REVIEW_TERMS):
+        return "security"
+    if _contains_any(text, FINANCE_REVIEW_TERMS):
+        return "finance"
+    if _contains_any(text, LEGAL_REVIEW_TERMS):
+        return "legal"
+    if _contains_any(text, MEDICAL_REVIEW_TERMS):
+        return "medical"
+    if _contains_any(text, TRAVEL_REVIEW_TERMS):
+        return "travel"
+    if _contains_any(text, MACHINE_SENDER_TERMS + MACHINE_SUBJECT_TERMS):
+        return "uncertain_machine"
+    return "unknown"
 
 
 def _is_github_copilot_notification(sender_address: str, text: str) -> bool:

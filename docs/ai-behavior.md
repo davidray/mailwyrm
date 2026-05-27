@@ -8,6 +8,10 @@ The classifier should return:
 - `machine_type`: optional structured subtype for machine mail. Current
   canonical machine types are `marketing`, `transactional`, `news`, `spam`,
   and `product_community`.
+- `review_type`: optional structured subtype for `needs_review` mail. Current
+  canonical review types are `security`, `finance`, `legal`, `medical`,
+  `account_access`, `travel`, `possible_human`, `uncertain_machine`, and
+  `unknown`.
 - `importance`: low, medium, or high.
 - `automation_safety`: low, medium, or high.
 - `confidence`: numeric score.

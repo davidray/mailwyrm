@@ -74,6 +74,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("detail-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("view-detail", static_root.joinpath("app.js").read_text())
+        self.assertIn("Review type:", static_root.joinpath("app.js").read_text())
         self.assertIn("correctionLine", static_root.joinpath("app.js").read_text())
         self.assertIn("noopener noreferrer", static_root.joinpath("app.js").read_text())
         self.assertIn("overflow: auto", static_root.joinpath("app.css").read_text())
@@ -252,6 +253,32 @@ class AppTest(unittest.TestCase):
         self.assertEqual(result["classified_messages"], 1)
         self.assertIn("msg-2", state.classifications)
         self.assertNotIn("msg-1", state.classifications)
+
+    def test_classify_local_messages_refreshes_missing_review_type(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Security alert for your account"),
+            },
+            classifications={
+                "msg-1": ClassificationRecord(
+                    message_id="msg-1",
+                    category="needs_review",
+                    machine_type=None,
+                    importance="high",
+                    automation_safety="low",
+                    confidence=0.74,
+                    reason="Legacy classification.",
+                    suggested_actions=["review", "protect"],
+                    classifier_version="rules-v0",
+                ),
+            },
+        )
+
+        result = classify_local_messages(state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertEqual(result["skipped_already_classified"], 0)
+        self.assertEqual(state.classifications["msg-1"].review_type, "security")
 
     def test_classify_local_messages_treats_zero_limit_as_noop(self) -> None:
         state = MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")})

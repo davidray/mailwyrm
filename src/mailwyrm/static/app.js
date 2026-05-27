@@ -100,6 +100,7 @@ function renderCockpit(payload) {
   renderLane(els.reviewLane, els.reviewCount, payload.lanes.needs_review, {
     empty: "No protected or uncertain messages in this mailbox scope.",
     label: "review",
+    badge: (item) => item.review_type || item.action || "review",
   });
   renderDigest(payload.digest);
   renderActions(payload.mailbox_actions);
@@ -201,7 +202,10 @@ function renderLane(target, counter, lane, options) {
   target.replaceChildren(
     ...lane.items.map((item) =>
       messageCard(item, {
-        badge: item.action || options.label,
+        badge:
+          typeof options.badge === "function"
+            ? options.badge(item)
+            : item.action || options.label,
         showSnippet: true,
         mailbox: state.mailbox,
       })
@@ -380,6 +384,7 @@ function classificationLines(payload) {
   const lines = [
     `Category: ${classification.category}`,
     `Machine type: ${classification.machine_type || "none"}`,
+    `Review type: ${classification.review_type || "none"}`,
     `Importance: ${classification.importance}`,
     `Automation safety: ${classification.automation_safety}`,
     `Confidence: ${formatConfidence(classification.confidence)}`,
@@ -429,6 +434,7 @@ function renderDetailError(message) {
 function metaLine(item) {
   const parts = [
     item.category,
+    item.review_type ? `${item.review_type.replaceAll("_", " ")} review` : "",
     item.importance ? `${item.importance} importance` : "",
     item.automation_safety ? `${item.automation_safety} safety` : "",
     `${formatConfidence(item.confidence)} confidence`,

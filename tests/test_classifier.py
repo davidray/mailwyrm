@@ -32,6 +32,7 @@ class ClassifierTest(unittest.TestCase):
 
         self.assertEqual(classification.category, "machine")
         self.assertEqual(classification.machine_type, "news")
+        self.assertIsNone(classification.review_type)
         self.assertIn("digest", classification.suggested_actions)
 
     def test_classifies_machine_marketing(self) -> None:
@@ -94,9 +95,98 @@ class ClassifierTest(unittest.TestCase):
         )
 
         self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "security")
         self.assertEqual(classification.importance, "high")
         self.assertEqual(classification.automation_safety, "low")
         self.assertIn("protect", classification.suggested_actions)
+
+    def test_categorizes_finance_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Billing <no-reply@example.com>",
+                subject="Payment failed for your card",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "finance")
+
+    def test_categorizes_account_access_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Accounts <no-reply@example.com>",
+                subject="Reset your password",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "account_access")
+
+    def test_categorizes_medical_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Clinic <no-reply@example.com>",
+                subject="Medical appointment update",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "medical")
+
+    def test_categorizes_legal_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Legal <no-reply@example.com>",
+                subject="Legal notice for your account",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "legal")
+
+    def test_categorizes_travel_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Airline <sender@example.com>",
+                subject="Flight itinerary changed",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "travel")
+
+    def test_categorizes_possible_human_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Ada <ada@example.com>",
+                subject="Re: security follow-up",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "possible_human")
+
+    def test_categorizes_uncertain_machine_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Updates <sender@example.com>",
+                subject="Your account update",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "uncertain_machine")
+
+    def test_categorizes_unknown_review_mail(self) -> None:
+        classification = classify_message(
+            message(
+                sender="Sender <sender@example.com>",
+                subject="A note",
+            )
+        )
+
+        self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "unknown")
 
     def test_plain_word_risk_terms_do_not_match_inside_other_words(self) -> None:
         classification = classify_message(
@@ -145,6 +235,7 @@ class ClassifierTest(unittest.TestCase):
         )
 
         self.assertEqual(classification.category, "needs_review")
+        self.assertEqual(classification.review_type, "security")
         self.assertEqual(classification.importance, "high")
         self.assertEqual(classification.automation_safety, "low")
         self.assertIn("protect", classification.suggested_actions)

@@ -59,6 +59,7 @@ def effective_classification(
         classification,
         category=correction.category,
         machine_type=correction.machine_type,
+        review_type=None,
         confidence=1.0,
         reason=correction.reason or f"User corrected classification to {correction.category}.",
         suggested_actions=_suggested_actions(correction.category),

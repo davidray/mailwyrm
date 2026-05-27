@@ -49,6 +49,7 @@ def classification(
     *,
     category: str = "machine",
     machine_type: str | None = "notification",
+    review_type: str | None = None,
     importance: str = "medium",
     automation_safety: str = "medium",
     confidence: float = 0.86,
@@ -64,6 +65,7 @@ def classification(
         reason="Automated sender or subject pattern.",
         suggested_actions=suggested_actions if suggested_actions is not None else ["digest"],
         classifier_version="rules-v0",
+        review_type=review_type,
     )
 
 
@@ -108,7 +110,8 @@ class CockpitTest(unittest.TestCase):
                 "msg-4": classification(
                     "msg-4",
                     category="needs_review",
-                    machine_type="security",
+                    machine_type=None,
+                    review_type="security",
                     importance="high",
                     automation_safety="low",
                     confidence=0.72,
@@ -158,6 +161,11 @@ class CockpitTest(unittest.TestCase):
             payload["lanes"]["needs_review"]["items"][0]["action"],
             "protect",
         )
+        self.assertEqual(
+            payload["lanes"]["needs_review"]["items"][0]["review_type"],
+            "security",
+        )
+        self.assertEqual(payload["lanes"]["needs_review"]["review_types"]["security"], 1)
         self.assertEqual(payload["digest"]["total_items"], 3)
         self.assertEqual(payload["digest"]["showing_items"], 1)
         self.assertIn("#all/msg-", payload["digest"]["items"][0]["gmail_url"])
@@ -227,6 +235,26 @@ class CockpitTest(unittest.TestCase):
             "--client-secret /path/to/client_secret.json",
             payload["commands"][0],
         )
+
+    def test_review_type_counts_skip_non_needs_review_items(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Low confidence machine")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="marketing",
+                    confidence=0.7,
+                    suggested_actions=["digest"],
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        self.assertEqual(payload["lanes"]["needs_review"]["total_items"], 1)
+        self.assertEqual(payload["lanes"]["needs_review"]["review_types"], {})
+        self.assertIsNone(payload["lanes"]["needs_review"]["items"][0]["review_type"])
 
     def test_cleanup_archive_candidates_ignore_already_archived_mail(self) -> None:
         archived = MessageRecord(
@@ -322,6 +350,7 @@ class CockpitTest(unittest.TestCase):
                 "msg-1": classification(
                     "msg-1",
                     machine_type="delivery",
+                    review_type=None,
                     importance="low",
                     automation_safety="high",
                     confidence=0.94,
@@ -352,6 +381,7 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["message"]["body_text"], "Package arrives Friday by 8 PM.")
         self.assertTrue(payload["message"]["has_body_text"])
         self.assertEqual(payload["classification"]["machine_type"], "delivery")
+        self.assertIsNone(payload["classification"]["review_type"])
         self.assertEqual(payload["suggested_action"]["action"], "trash_after_digest")
         self.assertTrue(payload["suggested_action"]["mutates_gmail"])
         self.assertEqual(payload["audit"][0]["action"], "archive_after_digest")
@@ -364,6 +394,46 @@ class CockpitTest(unittest.TestCase):
 
         self.assertIsNone(payload["classification"])
         self.assertIsNone(payload["suggested_action"])
+
+    def test_build_message_detail_payload_includes_review_type(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Security alert")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="needs_review",
+                    machine_type=None,
+                    review_type="security",
+                    importance="high",
+                    automation_safety="low",
+                    suggested_actions=["review", "protect"],
+                )
+            },
+        )
+
+        payload = build_message_detail_payload(state, message_id="msg-1")
+
+        self.assertEqual(payload["classification"]["review_type"], "security")
+
+    def test_build_message_detail_payload_defaults_missing_review_type(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Legacy review")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="needs_review",
+                    machine_type=None,
+                    review_type=None,
+                    importance="medium",
+                    automation_safety="low",
+                    suggested_actions=["review"],
+                )
+            },
+        )
+
+        payload = build_message_detail_payload(state, message_id="msg-1")
+
+        self.assertEqual(payload["classification"]["review_type"], "unknown")
 
     def test_build_message_detail_payload_includes_correction_without_classification(self) -> None:
         state = MailwyrmState(

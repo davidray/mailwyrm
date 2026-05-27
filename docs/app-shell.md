@@ -36,7 +36,8 @@ It shows:
 - Human, machine, and needs-review counts.
 - A prominent cleanup band for archive-ready and trash-ready inbox candidates,
   including messages that need digest or policy gates before Gmail mutation.
-- Primary attention lanes for human correspondence and protected or uncertain messages.
+- Primary attention lanes for human correspondence and protected or uncertain
+  messages, including review-type buckets for needs-review mail.
 - Archive and trash policy state.
 - Machine digest items with Gmail links.
 - Local message detail for lane, digest, and action-preview items.

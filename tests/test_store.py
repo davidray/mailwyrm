@@ -35,7 +35,7 @@ class StoreTest(unittest.TestCase):
                 classifications={
                     "msg-1": ClassificationRecord(
                         message_id="msg-1",
-                        category="human",
+                        category="needs_review",
                         machine_type=None,
                         importance="medium",
                         automation_safety="low",
@@ -43,6 +43,7 @@ class StoreTest(unittest.TestCase):
                         reason="Reply-style subject suggests a human conversation.",
                         suggested_actions=["review"],
                         classifier_version="rules-v0",
+                        review_type="possible_human",
                     )
                 },
                 corrections={
@@ -87,7 +88,8 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.history_id, "123")
         self.assertEqual(loaded.last_sync_mailbox, "all-mail")
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
-        self.assertEqual(loaded.classifications["msg-1"].category, "human")
+        self.assertEqual(loaded.classifications["msg-1"].category, "needs_review")
+        self.assertEqual(loaded.classifications["msg-1"].review_type, "possible_human")
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
         self.assertEqual(loaded.label_audit_events[0].label_ids, ["Label_1"])
@@ -100,6 +102,41 @@ class StoreTest(unittest.TestCase):
 
         self.assertTrue(state.automation_policy.archive_after_digest_enabled)
         self.assertFalse(state.automation_policy.trash_after_digest_enabled)
+
+    def test_classification_defaults_missing_review_type_to_none(self) -> None:
+        record = ClassificationRecord.from_dict(
+            {
+                "message_id": "msg-1",
+                "category": "needs_review",
+                "machine_type": None,
+                "importance": "medium",
+                "automation_safety": "low",
+                "confidence": 0.55,
+                "reason": "Legacy state.",
+                "suggested_actions": ["review"],
+                "classifier_version": "rules-v0",
+            }
+        )
+
+        self.assertIsNone(record.review_type)
+
+    def test_classification_normalizes_review_type_when_present(self) -> None:
+        record = ClassificationRecord.from_dict(
+            {
+                "message_id": "msg-1",
+                "category": "needs_review",
+                "machine_type": None,
+                "review_type": 123,
+                "importance": "medium",
+                "automation_safety": "low",
+                "confidence": 0.55,
+                "reason": "Hand-edited state.",
+                "suggested_actions": ["review"],
+                "classifier_version": "rules-v0",
+            }
+        )
+
+        self.assertEqual(record.review_type, "123")
 
 
 if __name__ == "__main__":
