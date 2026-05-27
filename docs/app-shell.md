@@ -50,7 +50,7 @@ It is organized around three first-class tabs:
 
 It shows:
 
-- Account and sync state.
+- Account and sync state behind the profile avatar menu.
 - Optional Real People, machine, and needs-review counts behind a feature flag.
 - A prominent cleanup band for archive-ready and trash-ready inbox candidates,
   including messages that need digest or policy gates before Gmail mutation.

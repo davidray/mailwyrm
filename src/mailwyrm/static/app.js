@@ -20,7 +20,8 @@ const els = {
   tabPanels: Array.from(document.querySelectorAll(".tab-panel")),
   mailbox: document.querySelector("#mailbox"),
   refresh: document.querySelector("#refresh"),
-  status: document.querySelector("#status-strip"),
+  profileAvatar: document.querySelector("#profile-avatar"),
+  profilePopover: document.querySelector("#profile-popover"),
   metrics: document.querySelector("#metrics"),
   cleanup: document.querySelector("#cleanup"),
   humanCount: document.querySelector("#human-count"),
@@ -53,6 +54,18 @@ els.mailbox.addEventListener("change", () => {
   loadCockpit();
 });
 els.refresh.addEventListener("click", loadCockpit);
+els.profileAvatar.addEventListener("click", () => {
+  const isOpen = !els.profilePopover.hidden;
+  els.profilePopover.hidden = isOpen;
+  els.profileAvatar.setAttribute("aria-expanded", isOpen ? "false" : "true");
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".profile-menu")) {
+    return;
+  }
+  els.profilePopover.hidden = true;
+  els.profileAvatar.setAttribute("aria-expanded", "false");
+});
 els.previewClose.addEventListener("click", () => {
   els.previewPanel.hidden = true;
 });
@@ -105,19 +118,7 @@ async function parseJsonResponse(response) {
 
 function renderCockpit(payload) {
   document.title = `${payload.title} - ${payload.date}`;
-  els.status.innerHTML = "";
-  els.status.append(
-    div("div", {}, [
-      div("strong", {}, payload.account.email),
-      div(
-        "p",
-        {},
-        `${payload.account.indexed_messages} indexed, ${payload.account.classified_messages} classified`
-      ),
-    ]),
-    div("p", {}, `Last sync: ${payload.account.last_sync_mailbox}`),
-    div("p", { class: "read-only" }, "Explicit app actions can update Gmail")
-  );
+  renderProfile(payload.account);
 
   renderMetrics(payload);
   renderCleanup(payload.cleanup);
@@ -138,6 +139,43 @@ function renderCockpit(payload) {
   renderTrash(payload.trash_gate);
   renderAudit(payload.audit);
   renderWorkflows(payload.workflows);
+}
+
+function renderProfile(account) {
+  els.profileAvatar.replaceChildren(profileAvatarContent(account));
+  els.profilePopover.replaceChildren(
+    profileLine("Account", account.email),
+    profileLine(
+      "Local index",
+      `${account.indexed_messages} indexed, ${account.classified_messages} classified`
+    ),
+    profileLine("Last sync", account.last_sync_mailbox),
+    profileLine("Gmail updates", "Explicit app actions can update Gmail", {
+      strong: true,
+    })
+  );
+}
+
+function profileAvatarContent(account) {
+  if (account.avatar_url) {
+    const image = document.createElement("img");
+    image.src = account.avatar_url;
+    image.alt = "";
+    return image;
+  }
+  return div("span", {}, profileInitial(account.email));
+}
+
+function profileInitial(email) {
+  const value = email && email !== "unknown" ? email : "M";
+  return value.trim()[0].toUpperCase();
+}
+
+function profileLine(label, value, options = {}) {
+  return div("div", { class: "profile-line" }, [
+    div("span", {}, label),
+    div(options.strong ? "strong" : "p", {}, value),
+  ]);
 }
 
 function renderCleanup(cleanup) {
@@ -899,7 +937,9 @@ function renderPreviewError(message) {
 }
 
 function renderError(message) {
-  els.status.replaceChildren(div("p", { class: "empty" }, message));
+  els.profilePopover.hidden = false;
+  els.profileAvatar.setAttribute("aria-expanded", "true");
+  els.profilePopover.replaceChildren(profileLine("Status", message));
 }
 
 function renderEmpty(target, message) {

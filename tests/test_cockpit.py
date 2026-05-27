@@ -153,6 +153,7 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["date"], "2026-05-26")
         self.assertTrue(payload["read_only"])
         self.assertEqual(payload["account"]["email"], "user@example.com")
+        self.assertIsNone(payload["account"]["avatar_url"])
         self.assertEqual(payload["attention"]["machine"], 2)
         self.assertEqual(payload["lanes"]["human"]["total_items"], 1)
         self.assertEqual(payload["lanes"]["human"]["items"][0]["subject"], "Dinner")

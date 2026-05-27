@@ -64,6 +64,7 @@ def build_daily_cockpit_payload(
         "read_only": True,
         "account": {
             "email": state.account_email or "unknown",
+            "avatar_url": None,
             "last_sync_mailbox": state.last_sync_mailbox or "unknown",
             "indexed_messages": len(state.messages),
             "classified_messages": len(state.classifications),
