@@ -1,356 +1,70 @@
-This is an important transition point.
-
-You are no longer just:
-
-* implementing features.
-
-You are now:
-
-# aligning products philosophically.
-
-That’s a much more mature product-development activity.
-
-And honestly?
-Catching this now is extremely valuable.
-
-Most ecosystems drift because:
-
-* products evolve independently,
-* and nobody pauses to re-evaluate coherence.
-
-You are doing exactly the right thing.
-
 # Bookwyrm Mail Realignment Prompt
 
-Bookwyrm Mail has evolved in ways that no longer fully align with the broader philosophical, emotional, and interaction principles of the Bookwyrm ecosystem.
+This prompt captures a product-specific realignment task for Bookwyrm Mail.
+Bookwyrm Foundation is the canonical source for ecosystem philosophy, tone,
+design principles, AI behavior, stewardship, and trust. Do not duplicate or
+reinterpret Foundation guidance here; read it directly and defer to it.
 
-Your task is not to redesign the product from scratch.
+## Required Foundation Context
 
-Your task is to:
+Before making realignment changes, read the `bookwyrm-foundation` repository:
 
-* study the Bookwyrm ecosystem carefully
-* identify areas where Mail has drifted
-* and begin evolving it toward stronger philosophical and experiential coherence.
+- `README.md`
+- `INDEX.md`
+- `codex/foundational-agent-instructions.md`
+- The Foundation philosophy, branding, business/trust, AI governance, product
+  taxonomy, and design-system documents referenced by `INDEX.md`.
 
-The goal is to make Bookwyrm Mail feel like:
+Use Bookwyrm Reader as an experiential reference for how Foundation principles
+manifest in a mature product, especially its atmosphere, pacing, reading
+ergonomics, interaction restraint, typography, and emotional tone.
 
-* a natural member of the Bookwyrm ecosystem
-  rather than:
-* a separate productivity-oriented email application.
+## Product-Specific Goal
 
----
+Evolve Bookwyrm Mail toward thoughtful communication management. The product
+should help users maintain calmer relationships with email by separating
+correspondence that deserves attention from machine-generated mail that can be
+summarized, reviewed, archived, or discarded through explicit policy.
 
-# Required Context
+Mail should feel like a natural Bookwyrm product, not a separate productivity
+dashboard. Preserve Gmail as the source of truth, preserve user control over
+mailbox mutation, and keep AI classification auditable.
 
-Before making any changes, carefully study:
+## Evaluate Mail-Specific Drift
 
-## Foundation Repository
+Review the existing product for places where Bookwyrm Mail drifts toward:
 
-Read:
+- generic email-client conventions
+- dashboard or metric-heavy behavior
+- notification-centric UX
+- aggressive workflow optimization
+- inbox-zero ideology
+- unclear Gmail mutation boundaries
+- AI decisions that are not explainable or reviewable
 
-* `README.md`
-* `INDEX.md`
+Identify Mail-specific terminology, navigation, component behavior, workflow
+assumptions, and implementation details that should change.
 
-### Philosophy
+## Initial Realignment Scope
 
-* `philosophy/protecting-the-character-of-bookwyrm.md`
-* `philosophy/evidence-matters.md`
-* `philosophy/intellectual-stewardship.md`
-* `philosophy/ai-first-company-building.md`
+Do not redesign the product from scratch. Favor small, thoughtful refinements
+that improve:
 
-### Branding
+- emotional coherence with Bookwyrm Foundation
+- correspondence-first workflow direction
+- calm presentation of Gmail actions and auditability
+- visual atmosphere where it is clearly product-specific
+- AI explanation clarity and user control
 
-* `branding/tone-and-voice.md`
-* `branding/visual-language.md`
-* `branding/inspirations.md`
+## Deliverable
 
-### Business And Trust
+After implementation, summarize:
 
-* `business/pricing-philosophy.md`
-* `business/trust-and-sustainability.md`
-* `ai/model-governance.md`
+- areas of Mail-specific drift discovered
+- inconsistencies with Foundation guidance
+- changes made
+- unresolved product tensions
+- recommendations for future iterations
 
-### Product Philosophy
-
-* `products/product-taxonomy.md`
-
-### Design
-
-* `design/design-system-principles.md`
-* `design/component-philosophy.md`
-* `design/color-and-material-palette.md`
-* `design/typography-system-guidance.md`
-* `design/screenshot-composition-philosophy.md`
-
-### Codex Guidance
-
-* `codex/foundational-agent-instructions.md`
-* `codex/product-ui-generator.md`
-
----
-
-## Bookwyrm Reader
-
-Study Bookwyrm Reader carefully.
-
-Pay attention to:
-
-* atmosphere
-* pacing
-* compositional calmness
-* annotation philosophy
-* reading ergonomics
-* interaction restraint
-* typography
-* navigation
-* and emotional tone.
-
-Reader currently represents one of the clearest manifestations of the Bookwyrm philosophy.
-
-Use it as an important experiential reference point.
-
----
-
-# Primary Goal
-
-Evolve Bookwyrm Mail toward:
-
-* calmness
-* intentionality
-* cognitive hospitality
-* and thoughtful communication stewardship.
-
-The product should increasingly feel:
-
-* literary
-* humane
-* reflective
-* trustworthy
-* and emotionally grounded.
-
-Bookwyrm Mail should not feel like:
-
-* productivity theater
-* inbox gamification
-* notification infrastructure
-* or engagement-driven communication software.
-
----
-
-# Conceptual Direction
-
-Bookwyrm Mail should evolve toward:
-
-> thoughtful communication management.
-
-The system should help users:
-
-* think clearly
-* communicate intentionally
-* preserve context
-* reduce cognitive overload
-* and maintain calmer relationships with email.
-
-The emotional reference should feel closer to:
-
-* correspondence
-* letters
-* thoughtful editorial exchange
-* and calm communication spaces
-
-than:
-
-* inbox throughput optimization.
-
----
-
-# Areas To Evaluate
-
-Review the existing product carefully for signs of drift toward:
-
-* generic email clients
-* dashboard behavior
-* productivity-gamification
-* density overload
-* notification-centric UX
-* aggressive workflow optimization
-* or emotionally noisy interfaces.
-
-Identify:
-
-* interaction patterns
-* visual systems
-* navigation structures
-* terminology
-* component behavior
-* and workflow assumptions
-
-that conflict with the Bookwyrm philosophy.
-
----
-
-# Desired Emotional Characteristics
-
-Bookwyrm Mail should increasingly feel:
-
-* calm
-* spacious
-* trustworthy
-* reflective
-* and cognitively lighter than conventional email systems.
-
-Users should feel:
-
-* less fragmented
-* less pressured
-* and less overwhelmed.
-
-The interface should encourage:
-
-* thoughtful communication
-* rather than compulsive inbox processing.
-
----
-
-# UX Direction
-
-Favor:
-
-* breathing room
-* editorial composition
-* calm navigation
-* restrained hierarchy
-* thoughtful pacing
-* and contextual clarity.
-
-Avoid:
-
-* aggressive inbox metrics
-* urgency indicators
-* gamified productivity patterns
-* excessive density
-* dashboard aesthetics
-* and notification-heavy behavior.
-
----
-
-# Communication Philosophy
-
-Email should be treated as:
-
-* correspondence
-* context
-* and intellectual continuity
-
-rather than:
-
-* task throughput.
-
-The interface should support:
-
-* slower thinking
-* contextual understanding
-* and meaningful communication stewardship.
-
----
-
-# AI Interaction Philosophy
-
-If AI exists within Bookwyrm Mail:
-
-* it should feel calm
-* transparent
-* and editorially supportive.
-
-Avoid:
-
-* aggressive automation
-* AI spectacle
-* and excessive intervention.
-
-AI should help users:
-
-* organize context
-* reduce overload
-* summarize thoughtfully
-* and maintain intentional communication workflows.
-
-Users should remain:
-
-* intellectually present
-* and in control.
-
----
-
-# Design Direction
-
-Move visually toward:
-
-* Bookwyrm Reader
-* literary calmness
-* editorial composition
-* warm darkness
-* thoughtful spacing
-* and typographic softness.
-
-Reduce:
-
-* visible “appness”
-* and productivity software energy.
-
-The interface should increasingly feel:
-
-* inhabitable
-* and emotionally coherent with the broader ecosystem.
-
----
-
-# What To Avoid
-
-Avoid drifting toward:
-
-* Superhuman-style productivity energy
-* Slack-style urgency
-* Gmail-style overload
-* productivity dashboards
-* engagement-driven UX
-* or “inbox zero” ideology.
-
-Bookwyrm Mail should not optimize for:
-
-* speed at all costs.
-
-It should optimize for:
-
-* thoughtful communication
-* and cognitive calmness.
-
----
-
-# Deliverable
-
-Perform an initial realignment pass focused on:
-
-* emotional coherence
-* interaction philosophy
-* visual atmosphere
-* and workflow direction.
-
-Do not attempt to solve everything in one iteration.
-
-Favor:
-
-* thoughtful refinement
-* over aggressive redesign.
-
-After implementation, provide:
-
-* a summary of areas of drift discovered
-* philosophical inconsistencies identified
-* changes made
-* unresolved tensions
-* and recommendations for future iterations.
-
-The goal is not merely improving Mail.
-
-The goal is helping it become a true Bookwyrm product.
+The goal is to help Bookwyrm Mail become a coherent Bookwyrm product while
+keeping this repository focused on local implementation details.

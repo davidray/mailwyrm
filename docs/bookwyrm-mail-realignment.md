@@ -4,6 +4,11 @@ This document records the first philosophical realignment pass for Bookwyrm
 Mail after comparing the current app with the Bookwyrm foundation and
 Bookwyrm Reader.
 
+Bookwyrm Foundation is now the canonical source for ecosystem philosophy, tone,
+visual language, design principles, trust, and AI governance. This document is a
+historical product-specific record of Mail drift and follow-up work; it should
+not be treated as a replacement for Foundation guidance.
+
 ## Areas Of Drift
 
 - The app framed itself as a "Daily cockpit", which suggested operational
@@ -64,4 +69,3 @@ Bookwyrm Reader.
 - Add a durable product principle: email is correspondence and intellectual
   continuity, not task throughput.
 - Preserve evidence and auditability, but present them calmly.
-

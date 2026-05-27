@@ -1,14 +1,31 @@
 # Mailwyrm Agent Guide
 
-This repo contains the product memory for Mailwyrm, an AI-first Gmail client.
+This repo contains the product memory for Bookwyrm Mail, an AI-first Gmail
+client within the broader Bookwyrm ecosystem.
+
+## Canonical Foundation
+
+This repository follows the Bookwyrm Foundation documents as the canonical
+source for ecosystem philosophy, tone, design principles, AI behavior,
+stewardship, and trust. Local guidance in this repository is subordinate to
+foundation guidance and should only define product-specific implementation
+details.
+
+When making product, design, trust, or AI-behavior changes, defer to the
+`bookwyrm-foundation` repository first. This repo should not duplicate broad
+Bookwyrm philosophy or design-system guidance; it should describe how those
+principles apply to Bookwyrm Mail.
 
 Before making product or architecture changes, read:
 
-1. [README.md](README.md)
-2. [docs/product-brief.md](docs/product-brief.md)
-3. [docs/architecture.md](docs/architecture.md)
-4. [docs/ai-behavior.md](docs/ai-behavior.md)
-5. [docs/decisions/0001-gmail-is-source-of-truth.md](docs/decisions/0001-gmail-is-source-of-truth.md)
+1. `bookwyrm-foundation/README.md`
+2. `bookwyrm-foundation/INDEX.md`
+3. `bookwyrm-foundation/codex/foundational-agent-instructions.md`
+4. [README.md](README.md)
+5. [docs/product-brief.md](docs/product-brief.md)
+6. [docs/architecture.md](docs/architecture.md)
+7. [docs/ai-behavior.md](docs/ai-behavior.md)
+8. [docs/decisions/0001-gmail-is-source-of-truth.md](docs/decisions/0001-gmail-is-source-of-truth.md)
 
 ## Non-Negotiable Product Assumptions
 

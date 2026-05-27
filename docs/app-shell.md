@@ -2,10 +2,11 @@
 
 `mailwyrm app` runs the first local Mailwyrm application.
 
-It serves a browser dashboard for the daily cockpit from local state. It can
-sync Gmail into the local index, classify locally indexed messages, save local
-review resolutions into Mailwyrm state, and perform explicit user-approved
-bundle actions when Gmail modify credentials are configured.
+It serves a local browser app for correspondence, digest review, and stewardship
+controls from local state. It can sync Gmail into the local index, classify
+locally indexed messages, save local review resolutions into Mailwyrm state, and
+perform explicit user-approved bundle actions when Gmail modify credentials are
+configured.
 
 Example:
 
@@ -26,8 +27,9 @@ shaped.
 
 The app exposes:
 
-- `/`: the dashboard UI.
-- `/api/daily-cockpit`: structured JSON for the same daily cockpit data.
+- `/`: the app UI.
+- `/api/daily-cockpit`: structured JSON for the correspondence workspace. The
+  route keeps its legacy name for compatibility.
 - `/api/message-detail`: read-only local message detail from indexed state.
 - `/api/workflow-preview`: read-only local reports for preview workflows.
 - `/api/gmail-sync`: Gmail read action that refreshes the local index for the
@@ -49,7 +51,8 @@ The app exposes:
 
 ## Current Scope
 
-The first app shell is intentionally an attention dashboard, not a full mailbox client.
+The first app shell is intentionally a correspondence workspace, not a full
+mailbox client.
 
 It is organized around three first-class tabs and one quieter operational tab:
 

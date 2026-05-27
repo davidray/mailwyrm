@@ -1,10 +1,11 @@
 # Daily Workflow
 
-`mailwyrm daily cockpit` renders the first UX-facing daily attention cockpit.
+`mailwyrm daily cockpit` renders the first UX-facing correspondence workspace
+report. The command keeps its legacy `cockpit` name for compatibility.
 
 It is read-only. It does not call Gmail, mutate local state, mark messages as digested, apply labels, archive messages, or trash messages.
 
-The cockpit combines:
+The report combines:
 
 - Account and sync state.
 - Attention counts for human, machine, and needs-review mail.
@@ -22,7 +23,8 @@ uv run mailwyrm daily cockpit
 uv run mailwyrm daily cockpit --mailbox all-mail --limit 100 --audit-limit 25
 ```
 
-The `--limit` option caps both digest items and mailbox action rows so the cockpit remains scannable.
+The `--limit` option caps both digest items and mailbox action rows so the
+report remains scannable.
 
 ## Preview
 
@@ -68,7 +70,8 @@ The apply command requires a stored Gmail token with `gmail.modify`, because it 
 
 ## Status
 
-`mailwyrm daily status` is a read-only local audit dashboard. It does not call Gmail and does not mutate local state.
+`mailwyrm daily status` is a read-only local audit report. It does not call
+Gmail and does not mutate local state.
 
 It summarizes:
 

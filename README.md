@@ -5,6 +5,11 @@ management. Its core job is to protect human attention by separating human
 correspondence from machine correspondence, then turning routine machine mail
 into a calm digest with links back to the original messages.
 
+Bookwyrm Foundation is the canonical source for ecosystem philosophy, tone,
+design principles, AI governance, stewardship, and trust. This repository
+contains only Bookwyrm Mail-specific product, architecture, Gmail, and workflow
+guidance.
+
 The project should treat Gmail as the source of truth. Mailwyrm is not a separate mailbox, a forwarding service, or a parallel archive. Actions taken in Mailwyrm should be reflected in Gmail, and actions taken in Gmail should be reflected back in Mailwyrm.
 
 ## Product Intent
@@ -26,6 +31,8 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 
 ## Canonical Docs
 
+- Bookwyrm Foundation: canonical ecosystem philosophy, tone, design, trust, and
+  AI governance.
 - [Product brief](docs/product-brief.md): the durable product vision and MVP shape.
 - [Architecture notes](docs/architecture.md): Gmail-native sync, labels, actions, and data boundaries.
 - [AI behavior](docs/ai-behavior.md): classification, summarization, confidence, and automation principles.
@@ -41,7 +48,7 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 - [Gmail history reconciliation](docs/gmail-history-reconciliation.md): read-only cursor-based label and delete reconciliation.
 - [Mailbox action preview](docs/mailbox-action-preview.md): preview archive, keep, protect, review, or `trash_after_digest` plans without mutating Gmail.
 - [Daily workflow](docs/daily-preview.md): preview, apply, and status commands for the daily machine-mail workflow.
-- [App shell](docs/app-shell.md): local browser dashboard for the daily cockpit and local workflows.
+- [App shell](docs/app-shell.md): local browser app for correspondence, digest, review, and workflow controls.
 - [Automation policy](docs/automation-policy.md): local policy status for archive and trash trust boundaries.
 - [Todo](docs/todo.md): durable follow-up work for the backend and app experience.
 

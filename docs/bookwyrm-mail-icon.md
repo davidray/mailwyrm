@@ -1,5 +1,8 @@
 # Bookwyrm Mail Icon
 
+Bookwyrm Foundation is canonical for visual language. This document records
+only the product-specific icon direction for Bookwyrm Mail.
+
 The Bookwyrm Mail icon should feel related to the Bookwyrm Reader icon without
 copying it directly.
 

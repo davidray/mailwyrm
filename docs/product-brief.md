@@ -1,5 +1,9 @@
 # Product Brief
 
+Bookwyrm Foundation is the canonical source for ecosystem philosophy, tone,
+design, trust, and AI governance. This brief defines only the Bookwyrm
+Mail-specific product shape.
+
 ## Problem
 
 Email mixes human obligations with machine-generated noise. A message from a friend, a delivery receipt, a bank alert, a newsletter, and a password reset can all arrive in the same stream with the same visual weight.
