@@ -404,7 +404,6 @@ function digestRowCard(group, bundle) {
       ]),
     ]),
     group.summary ? div("p", { class: "snippet" }, group.summary) : "",
-    digestRowMarkers(group),
     digestRowControls(group, bundle),
   ]);
 }
@@ -420,19 +419,6 @@ function digestRowTitle(group) {
     );
   }
   return div("div", { class: "message-link digest-group-title" }, group.sender_name || group.sender);
-}
-
-function digestRowMarkers(group) {
-  const markers = [];
-  if (group.followup_count) {
-    markers.push(
-      div("span", { class: "followup-identity" }, `${group.followup_count} follow-up needed`)
-    );
-  }
-  if (!markers.length) {
-    return "";
-  }
-  return div("div", { class: "digest-row-markers" }, markers);
 }
 
 function digestRowControls(group, bundle) {
