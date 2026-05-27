@@ -14,6 +14,9 @@ from mailwyrm.app import (
     _request_mailbox,
     _request_string,
     _request_string_list,
+    apply_archive_after_digest,
+    apply_gmail_labels,
+    apply_trash_after_digest,
     build_workflow_preview_payload,
     classify_local_messages,
     create_app_server,
@@ -26,6 +29,7 @@ from mailwyrm.models import (
     DigestAuditEvent,
     MessageRecord,
 )
+from mailwyrm.gmail import GmailLabel
 from mailwyrm.store import MailwyrmState
 
 
@@ -88,6 +92,10 @@ class AppTest(unittest.TestCase):
         self.assertIn("setRefreshState", static_root.joinpath("app.js").read_text())
         self.assertIn("refresh-success", static_root.joinpath("app.css").read_text())
         self.assertIn("/api/gmail-sync", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/gmail-labels/apply", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/archive-after-digest", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/trash-after-digest", static_root.joinpath("app.js").read_text())
+        self.assertIn("confirmGmailMutation", static_root.joinpath("app.js").read_text())
         self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
         self.assertIn("renderProfile", static_root.joinpath("app.js").read_text())
         self.assertIn("profileInitial", static_root.joinpath("app.js").read_text())
@@ -394,6 +402,85 @@ class AppTest(unittest.TestCase):
         self.assertEqual(client.full_message_ids, ["msg-1"])
         self.assertEqual(state.messages["msg-1"].body_text, "Body text")
 
+    def test_apply_gmail_labels_returns_preview_report_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Receipt")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_gmail_labels(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Gmail Labels Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertTrue(result["mutates_gmail"])
+        self.assertIn("Mailwyrm/Machine", result["report"])
+        self.assertEqual(client.added, [("msg-1", ["label-machine"])])
+        self.assertEqual(state.label_audit_events[0].action, "add_labels")
+
+    def test_apply_archive_after_digest_uses_existing_policy_gates(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Receipt"),
+                "msg-2": message("msg-2", "Not digested"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+            digest_audit_events=[
+                DigestAuditEvent(
+                    message_id="msg-1",
+                    digest_title_date="2026-05-26",
+                    reason="Low-risk machine mail.",
+                    classifier_version="rules-v0",
+                    created_at="2026-05-26T00:00:00+00:00",
+                )
+            ],
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_archive_after_digest(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Archive Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["skipped_not_digested"], 1)
+        self.assertIn("Gmail will be modified after this preview.", result["report"])
+        self.assertEqual(client.removed, [("msg-1", ["INBOX"])])
+        self.assertNotIn("INBOX", state.messages["msg-1"].label_ids)
+        self.assertIn("INBOX", state.messages["msg-2"].label_ids)
+
+    def test_apply_trash_after_digest_uses_policy_gate(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Copilot")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[
+                DigestAuditEvent(
+                    message_id="msg-1",
+                    digest_title_date="2026-05-26",
+                    reason="Low-risk notification.",
+                    classifier_version="rules-v0",
+                    created_at="2026-05-26T00:00:00+00:00",
+                )
+            ],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_trash_after_digest(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Trash Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["skipped_policy_disabled"], 0)
+        self.assertIn("Trash policy: enabled", result["report"])
+        self.assertEqual(client.trashed, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["TRASH"])
+
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))
         self.assertFalse(_is_app_mutation_request({APP_MUTATION_HEADER: "other"}))
@@ -493,3 +580,36 @@ class FakeAppSyncClient:
                 "body": {"data": "Qm9keSB0ZXh0"},
             },
         }
+
+
+class FakeAppModifyClient:
+    def __init__(self) -> None:
+        self.added: list[tuple[str, list[str]]] = []
+        self.removed: list[tuple[str, list[str]]] = []
+        self.trashed: list[str] = []
+
+    def ensure_mailwyrm_labels(self, label_names=None):
+        labels = {
+            "Mailwyrm/Human": GmailLabel(id="label-human", name="Mailwyrm/Human"),
+            "Mailwyrm/Machine": GmailLabel(id="label-machine", name="Mailwyrm/Machine"),
+            "Mailwyrm/Needs Review": GmailLabel(
+                id="label-review",
+                name="Mailwyrm/Needs Review",
+            ),
+            "Mailwyrm/Protected": GmailLabel(
+                id="label-protected",
+                name="Mailwyrm/Protected",
+            ),
+        }
+        if label_names is None:
+            return labels
+        return {label_name: labels[label_name] for label_name in label_names}
+
+    def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.added.append((message_id, label_ids))
+
+    def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.removed.append((message_id, label_ids))
+
+    def trash_message(self, message_id: str) -> None:
+        self.trashed.append(message_id)

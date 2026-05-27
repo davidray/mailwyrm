@@ -22,6 +22,7 @@ from mailwyrm.actions import (
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import build_digest_items
 from mailwyrm.digest import build_digest_bundles
+from mailwyrm.labels import build_label_plans
 from mailwyrm.models import MACHINE_TYPES
 from mailwyrm.store import MailwyrmState
 
@@ -353,7 +354,7 @@ def _workflow_controls(
     action_counts = _action_counts(action_plans)
     archive_count = action_counts[ACTION_ARCHIVE_AFTER_DIGEST]
     trash_count = len(trash_preview.plans)
-    label_count = len(action_plans)
+    label_count = len(build_label_plans(state, limit=limit, mailbox=mailbox))
     classify_count = _unclassified_message_count(state, mailbox=mailbox, limit=limit)
     client_secret_arg = _client_secret_arg(client_secret)
 
@@ -407,6 +408,8 @@ def _workflow_controls(
             "count": label_count,
             "mutates_gmail": True,
             "description": "Apply Gmail-visible Mailwyrm labels after reviewing the plan.",
+            "app_action": "labels",
+            "action_label": "Apply labels",
             "preview_command": (
                 "uv run mailwyrm labels preview"
                 f"{mailbox_arg}{limit_arg}"
@@ -425,6 +428,8 @@ def _workflow_controls(
             "count": archive_count,
             "mutates_gmail": True,
             "description": "Archive eligible machine mail that already appeared in a digest.",
+            "app_action": "archive",
+            "action_label": "Archive",
             "preview_command": (
                 "uv run mailwyrm actions preview"
                 f"{mailbox_arg}{limit_arg}"
@@ -447,6 +452,8 @@ def _workflow_controls(
             "count": trash_count,
             "mutates_gmail": True,
             "description": "Move only policy-gated low-risk digest mail to Gmail Trash.",
+            "app_action": "trash",
+            "action_label": "Move to Trash",
             "preview_command": (
                 "uv run mailwyrm actions preview-trash"
                 f"{mailbox_arg}{limit_arg}"

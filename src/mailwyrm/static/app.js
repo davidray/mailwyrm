@@ -10,6 +10,9 @@ const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "tra
 const appActionEndpoints = {
   sync: "/api/gmail-sync",
   classify: "/api/local-classify",
+  labels: "/api/gmail-labels/apply",
+  archive: "/api/archive-after-digest",
+  trash: "/api/trash-after-digest",
 };
 const reviewMachineTypes = [
   ["marketing", "Marketing"],
@@ -1007,6 +1010,9 @@ function appActionButton(workflow) {
 }
 
 async function runAppAction(workflow, button) {
+  if (workflow.mutates_gmail && !confirmGmailMutation(workflow)) {
+    return;
+  }
   const params = new URLSearchParams({
     mailbox: state.mailbox,
     limit: String(state.limit),
@@ -1050,6 +1056,13 @@ async function runAppAction(workflow, button) {
   }
 }
 
+function confirmGmailMutation(workflow) {
+  return window.confirm(
+    `${workflow.title} will update Gmail for the selected mailbox scope.\n\n` +
+      "Review the preview first if you are not sure. Continue?"
+  );
+}
+
 function previewButton(workflow) {
   const button = div("button", { type: "button", class: "preview-workflow" }, "View preview");
   button.addEventListener("click", () => loadWorkflowPreview(workflow.id, button));
@@ -1088,6 +1101,17 @@ function renderWorkflowPreview(payload) {
 }
 
 function actionReportLines(payload) {
+  if (payload.report) {
+    return [
+      payload.message,
+      "",
+      ...payload.report.split("\n"),
+      "",
+      payload.mutates_gmail
+        ? payload.gmail_refresh_hint || "Gmail was modified."
+        : "Gmail was not modified.",
+    ];
+  }
   if (payload.report_lines && payload.report_lines.length) {
     return [payload.message, "", ...payload.report_lines];
   }

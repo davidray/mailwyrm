@@ -35,6 +35,12 @@ The app exposes:
 - `/api/local-classify`: local-only classification for indexed messages.
 - `/api/review-resolution`: local-only review resolution for indexed messages.
 - `/api/followup`: local-only follow-up markers for indexed digest messages.
+- `/api/gmail-labels/apply`: explicit Gmail label application for the selected
+  mailbox scope.
+- `/api/archive-after-digest`: explicit Gmail archive action for digest-ready
+  mailbox action plans.
+- `/api/trash-after-digest`: explicit Gmail Trash action for digest-ready,
+  policy-gated mailbox action plans.
 - `/api/machine-bundle/got-it`: explicit Gmail Trash action for a machine-mail
   category bundle.
 - `/api/conversation-complete`: explicit Gmail archive action for a human
@@ -82,8 +88,9 @@ It shows:
 - Recent Gmail mutation audit events.
 - Preview-first workflow controls for local classification, daily preview,
   label preview, archive preview, and trash preview.
-- App-owned workflow buttons for Gmail sync and local classification, so the
-  normal daily loop does not require copying commands into a terminal.
+- App-owned workflow buttons for Gmail sync, local classification, Gmail label
+  application, archive-after-digest, and trash-after-digest, so the normal daily
+  loop does not require copying commands into a terminal.
 - In-app read-only preview reports for daily preview, label preview, mailbox
   action preview, and trash preview in the Tools tab.
 - In-app local classification and review resolution for indexed messages in
@@ -93,12 +100,11 @@ It shows:
 
 The app can read Gmail to refresh local Mailwyrm state. It can also write local
 Mailwyrm classification, correction, and follow-up state for indexed messages.
-It may render local preview reports from indexed Mailwyrm state. A category-level
-"Got it" button is an explicit user-approved Gmail mutation: when Gmail modify
-credentials are configured, it moves every non-follow-up message in that
-machine-mail bundle to Gmail Trash and writes local audit events. Completing a
-Real People conversation is also an explicit user-approved Gmail mutation: it
-archives the Gmail thread by removing `INBOX` and writes local audit events for
-indexed messages in that thread. Gmail remains the source of truth, and
-remaining mailbox mutations still happen through explicit CLI commands that
-print their preview reports before applying changes.
+It may render local preview reports from indexed Mailwyrm state. Workflow
+buttons that mutate Gmail require the local app mutation header and show a
+browser confirmation before calling the local server endpoint. Applying labels,
+archiving after digest, trashing after digest, completing Real People
+conversations, and category-level "Got it" cleanup are explicit user-approved
+Gmail mutations when Gmail modify credentials are configured. Gmail remains the
+source of truth, and each successful mutation updates local state and writes
+audit events.

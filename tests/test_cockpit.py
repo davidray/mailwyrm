@@ -237,6 +237,15 @@ class CockpitTest(unittest.TestCase):
             "classify --mailbox inbox --limit 1",
             classify_workflow["primary_command"],
         )
+        labels_workflow = payload["workflows"][3]
+        self.assertEqual(labels_workflow["app_action"], "labels")
+        self.assertEqual(labels_workflow["action_label"], "Apply labels")
+        archive_workflow = payload["workflows"][4]
+        self.assertEqual(archive_workflow["app_action"], "archive")
+        self.assertEqual(archive_workflow["action_label"], "Archive")
+        trash_workflow = payload["workflows"][5]
+        self.assertEqual(trash_workflow["app_action"], "trash")
+        self.assertEqual(trash_workflow["action_label"], "Move to Trash")
 
     def test_review_resolution_moves_message_from_review_to_digest_bundle(self) -> None:
         state = MailwyrmState(
