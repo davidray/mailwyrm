@@ -120,6 +120,24 @@ class StoreTest(unittest.TestCase):
 
         self.assertIsNone(record.review_type)
 
+    def test_classification_normalizes_review_type_when_present(self) -> None:
+        record = ClassificationRecord.from_dict(
+            {
+                "message_id": "msg-1",
+                "category": "needs_review",
+                "machine_type": None,
+                "review_type": 123,
+                "importance": "medium",
+                "automation_safety": "low",
+                "confidence": 0.55,
+                "reason": "Hand-edited state.",
+                "suggested_actions": ["review"],
+                "classifier_version": "rules-v0",
+            }
+        )
+
+        self.assertEqual(record.review_type, "123")
+
 
 if __name__ == "__main__":
     unittest.main()

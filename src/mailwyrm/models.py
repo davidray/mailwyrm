@@ -238,6 +238,7 @@ class ClassificationRecord:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ClassificationRecord":
+        raw_review_type = data.get("review_type")
         return cls(
             message_id=str(data["message_id"]),
             category=str(data["category"]),
@@ -248,7 +249,7 @@ class ClassificationRecord:
             reason=str(data["reason"]),
             suggested_actions=[str(action) for action in data.get("suggested_actions", [])],
             classifier_version=str(data["classifier_version"]),
-            review_type=data.get("review_type"),
+            review_type=None if raw_review_type is None else str(raw_review_type),
         )
 
 

@@ -110,7 +110,7 @@ class CockpitTest(unittest.TestCase):
                 "msg-4": classification(
                     "msg-4",
                     category="needs_review",
-                    machine_type="security",
+                    machine_type=None,
                     review_type="security",
                     importance="high",
                     automation_safety="low",
@@ -235,6 +235,26 @@ class CockpitTest(unittest.TestCase):
             "--client-secret /path/to/client_secret.json",
             payload["commands"][0],
         )
+
+    def test_review_type_counts_skip_non_needs_review_items(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Low confidence machine")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="marketing",
+                    confidence=0.7,
+                    suggested_actions=["digest"],
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        self.assertEqual(payload["lanes"]["needs_review"]["total_items"], 1)
+        self.assertEqual(payload["lanes"]["needs_review"]["review_types"], {})
+        self.assertIsNone(payload["lanes"]["needs_review"]["items"][0]["review_type"])
 
     def test_cleanup_archive_candidates_ignore_already_archived_mail(self) -> None:
         archived = MessageRecord(

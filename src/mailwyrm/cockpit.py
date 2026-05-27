@@ -507,8 +507,11 @@ def _attention_lanes(
         lane = lanes[lane_name]
         lane["total_items"] += 1
         if lane_name == "needs_review":
-            review_type = _review_type_payload(classification) or "unknown"
-            lane["review_types"][review_type] = lane["review_types"].get(review_type, 0) + 1
+            review_type = _review_type_payload(classification)
+            if review_type is not None:
+                lane["review_types"][review_type] = (
+                    lane["review_types"].get(review_type, 0) + 1
+                )
         if limit is None or lane["showing_items"] < limit:
             lane["items"].append(
                 _lane_item_payload(
