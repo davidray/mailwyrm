@@ -468,7 +468,6 @@ function digestMessageControls(group) {
   if (messages.length === 1) {
     const message = messages[0];
     return [
-      detailButton(message, state.mailbox),
       link(message.gmail_url, "Open in Gmail", "secondary-link"),
     ];
   }
@@ -483,7 +482,6 @@ function digestMessageControls(group) {
             div("div", { class: "digest-message-item" }, [
               div("span", {}, message.subject),
               div("div", { class: "digest-message-actions" }, [
-                detailButton(message, state.mailbox),
                 link(message.gmail_url, "Open in Gmail", "secondary-link"),
               ]),
             ])
@@ -872,7 +870,6 @@ function messageCard(item, options) {
     div("div", { class: "item-actions" }, [
       options.reassignToDigest ? digestReassignmentSelect(item) : "",
       options.completeConversation ? completeConversationButton(item) : "",
-      detailButton(item, options.mailbox || state.mailbox),
       link(item.gmail_url, "Open in Gmail", "secondary-link"),
     ]),
   ]);
@@ -1038,12 +1035,6 @@ function machineTypeLabel(type) {
 
 function subjectButton(item, mailbox) {
   const button = div("button", { type: "button", class: "message-link" }, item.subject);
-  button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
-  return button;
-}
-
-function detailButton(item, mailbox) {
-  const button = div("button", { type: "button", class: "view-detail" }, "Details");
   button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
   return button;
 }

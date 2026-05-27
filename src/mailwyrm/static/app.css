@@ -760,7 +760,6 @@ button:disabled {
   color: var(--red);
 }
 
-.view-detail,
 .secondary-link,
 .complete-conversation {
   display: inline-flex;
