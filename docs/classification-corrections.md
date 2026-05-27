@@ -4,6 +4,19 @@ Classification corrections are local user feedback for improving Mailwyrm's clas
 
 Corrections do not mutate Gmail.
 
+The app can also save local review resolutions for `needs_review` messages.
+Those resolutions are stored as corrections and then flow through the normal
+mailbox action planner:
+
+- Human: keep foregrounded as human correspondence.
+- Protect: keep protected from mailbox automation.
+- Archive: treat as machine mail that can archive after digest.
+- Trash: treat as low-risk machine mail that can trash after digest, subject to
+  the existing digest and policy gates.
+
+Review resolutions still do not mutate Gmail. They only change local Mailwyrm
+state until the user runs an explicit Gmail-writing command.
+
 ## Commands
 
 ```sh

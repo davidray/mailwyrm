@@ -16,10 +16,10 @@ The client should foreground human correspondence and convert machine correspond
 
 When the user opens Mailwyrm, they should primarily see:
 
-- People who need a response.
+- Real People: people who need a response.
 - People the user is waiting on.
 - Human conversations with new activity.
-- A daily summary of machine correspondence.
+- Daily summaries of machine correspondence grouped by type.
 - Important machine-generated events that require action.
 
 The user should not need to manually triage routine receipts, shipping notices, SaaS updates, newsletters, or alert noise every day.
@@ -33,6 +33,10 @@ Human correspondence:
 - Work conversations.
 - Small-group threads.
 - Messages where a person likely expects the user to read or respond.
+
+When a human conversation no longer needs attention, the user should be able
+to mark it complete. Completing a conversation archives the Gmail thread and
+removes it from Real People until new inbox activity arrives.
 
 Machine correspondence:
 
@@ -57,7 +61,11 @@ correspondence, or a durable policy.
 
 ## Daily Machine Digest
 
-The digest should be structured rather than a flat list of summaries.
+The digest should be structured rather than a flat list of emails. The user
+should see one section per machine-mail category, such as news, marketing,
+transactional, spam, and product community. Each section should summarize what
+arrived in that category, grouped by sender when the same sender produced
+multiple messages, without making the user inspect every original email.
 
 Useful categories include:
 
@@ -69,7 +77,24 @@ Useful categories include:
 - Newsletters worth reading.
 - Low-value mail handled automatically.
 
-Each digest item should link back to the original Gmail message or Mailwyrm thread view.
+The default digest view should not make individual emails the main object. Links
+to original Gmail messages may be available from detail surfaces, but the
+primary workflow should let the user understand and clear a whole category in
+one motion.
+
+Digest rows should match the category. Repeated product, community, marketing,
+or transactional senders may be compressed into sender-level summaries, but
+news should remain headline-first so distinct stories are visible even when they
+come from the same sender.
+
+For disposable categories such as news, marketing, spam, and low-risk product
+community mail, the app should offer a category-level "Got it" action. When the
+user clicks it, Mailwyrm should record that the messages were digested and move
+the whole category bundle to Gmail Trash, with local audit events.
+
+The digest must also support follow-up exceptions. If the user marks a digest
+row as needing follow-up, those messages remain protected from "Got it" cleanup
+and the follow-up identity stays visible until the user explicitly removes it.
 
 ## Automation Trust Ladder
 

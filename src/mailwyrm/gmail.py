@@ -126,6 +126,13 @@ class GmailClient:
             remove_label_ids=label_ids,
         )
 
+    def remove_labels_from_thread(self, thread_id: str, label_ids: list[str]) -> None:
+        self.modify_thread_labels(
+            thread_id,
+            add_label_ids=[],
+            remove_label_ids=label_ids,
+        )
+
     def modify_message_labels(
         self,
         message_id: str,
@@ -135,6 +142,21 @@ class GmailClient:
     ) -> None:
         self._post(
             f"/users/me/messages/{urllib.parse.quote(message_id, safe='')}/modify",
+            {
+                "addLabelIds": add_label_ids,
+                "removeLabelIds": remove_label_ids,
+            },
+        )
+
+    def modify_thread_labels(
+        self,
+        thread_id: str,
+        *,
+        add_label_ids: list[str],
+        remove_label_ids: list[str],
+    ) -> None:
+        self._post(
+            f"/users/me/threads/{urllib.parse.quote(thread_id, safe='')}/modify",
             {
                 "addLabelIds": add_label_ids,
                 "removeLabelIds": remove_label_ids,

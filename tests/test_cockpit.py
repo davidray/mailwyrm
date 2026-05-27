@@ -7,6 +7,7 @@ from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
+    FollowUpMarker,
     LabelAuditEvent,
     MessageRecord,
 )
@@ -153,6 +154,7 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["date"], "2026-05-26")
         self.assertTrue(payload["read_only"])
         self.assertEqual(payload["account"]["email"], "user@example.com")
+        self.assertIsNone(payload["account"]["avatar_url"])
         self.assertEqual(payload["attention"]["machine"], 2)
         self.assertEqual(payload["lanes"]["human"]["total_items"], 1)
         self.assertEqual(payload["lanes"]["human"]["items"][0]["subject"], "Dinner")
@@ -169,7 +171,14 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["digest"]["total_items"], 3)
         self.assertEqual(payload["digest"]["showing_items"], 1)
         self.assertIn("#all/msg-", payload["digest"]["items"][0]["gmail_url"])
+        self.assertEqual(payload["digest"]["bundles"][0]["action"], "trash")
+        self.assertTrue(
+            payload["digest"]["bundles"][0]["action_label"].startswith("Got it: trash")
+        )
+        self.assertIn("sender_groups", payload["digest"]["bundles"][0])
         self.assertEqual(payload["mailbox_actions"]["mailbox"], "inbox")
+        self.assertEqual(payload["mailbox_actions"]["showing_plans"], 1)
+        self.assertEqual(payload["mailbox_actions"]["total_plans"], 4)
         self.assertEqual(len(payload["mailbox_actions"]["plans"]), 1)
         self.assertIn(
             "#inbox/msg-",
@@ -184,6 +193,7 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["cleanup"]["kept_human"], 0)
         self.assertEqual(payload["cleanup"]["protected_or_review"], 0)
         self.assertTrue(payload["configuration"]["client_secret_configured"])
+        self.assertNotIn("features", payload)
         self.assertIn(
             "--client-secret /Users/dave/code/client_secret.json",
             payload["cleanup"]["archive"]["apply_command"],
@@ -224,6 +234,130 @@ class CockpitTest(unittest.TestCase):
             classify_workflow["primary_command"],
         )
 
+    def test_review_resolution_moves_message_from_review_to_digest_bundle(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Morning headlines")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="needs_review",
+                    machine_type=None,
+                    review_type="uncertain_machine",
+                    importance="medium",
+                    automation_safety="low",
+                    suggested_actions=["review", "protect"],
+                )
+            },
+            corrections={
+                "msg-1": ClassificationCorrection(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="news",
+                    reason="User resolved this from the Review card.",
+                    suggested_actions=["digest"],
+                    importance="medium",
+                    automation_safety="medium",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        self.assertEqual(payload["lanes"]["needs_review"]["total_items"], 0)
+        self.assertEqual(payload["attention"]["machine"], 1)
+        self.assertEqual(payload["digest"]["bundles"][0]["title"], "News")
+        self.assertEqual(
+            payload["digest"]["bundles"][0]["sender_groups"][0]["subject"],
+            "Morning headlines",
+        )
+        self.assertEqual(
+            payload["digest"]["bundles"][0]["sender_groups"][0]["summary"],
+            "A useful local snippet.",
+        )
+
+    def test_digest_bundle_payload_groups_same_sender_rows(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Copilot finished one"),
+                "msg-2": message("msg-2", "Copilot finished two"),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-msg-3",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Another sender.",
+                    headers={
+                        "From": "GitHub <notifications@github.com>",
+                        "Subject": "Issue update",
+                    },
+                ),
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="product_community",
+                ),
+                "msg-2": classification(
+                    "msg-2",
+                    category="machine",
+                    machine_type="product_community",
+                ),
+                "msg-3": classification(
+                    "msg-3",
+                    category="machine",
+                    machine_type="product_community",
+                ),
+            },
+            followups={
+                "msg-2": FollowUpMarker(
+                    message_id="msg-2",
+                    reason="Needs a reply.",
+                    created_at="2026-05-25T00:00:00+00:00",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        groups = payload["digest"]["bundles"][0]["sender_groups"]
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0]["sender_email"], "sender@example.com")
+        self.assertEqual(groups[0]["count"], 2)
+        self.assertEqual(groups[0]["message_ids"], ["msg-1", "msg-2"])
+        self.assertEqual(groups[0]["followup_count"], 1)
+        self.assertEqual(groups[0]["subject"], "")
+        self.assertEqual(
+            groups[0]["summary"],
+            "2 messages: Copilot finished one; Copilot finished two",
+        )
+        self.assertEqual(groups[1]["sender_email"], "notifications@github.com")
+        self.assertEqual(groups[1]["subject"], "Issue update")
+
+    def test_digest_bundle_payload_keeps_news_as_headline_rows(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "First headline"),
+                "msg-2": message("msg-2", "Second headline"),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="machine", machine_type="news"),
+                "msg-2": classification("msg-2", category="machine", machine_type="news"),
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        groups = payload["digest"]["bundles"][0]["sender_groups"]
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0]["sender_email"], "sender@example.com")
+        self.assertEqual(groups[0]["count"], 1)
+        self.assertEqual(groups[0]["subject"], "First headline")
+        self.assertEqual(groups[1]["sender_email"], "sender@example.com")
+        self.assertEqual(groups[1]["count"], 1)
+        self.assertEqual(groups[1]["subject"], "Second headline")
+
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(
             MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),
@@ -235,6 +369,66 @@ class CockpitTest(unittest.TestCase):
             "--client-secret /path/to/client_secret.json",
             payload["commands"][0],
         )
+
+    def test_real_people_lane_groups_messages_by_sender(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-msg-1",
+                    history_id="10",
+                    internal_date="1710000000002",
+                    label_ids=["INBOX"],
+                    snippet="First note.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "First",
+                    },
+                ),
+                "msg-2": MessageRecord(
+                    id="msg-2",
+                    thread_id="thread-msg-2",
+                    history_id="10",
+                    internal_date="1710000000001",
+                    label_ids=["INBOX"],
+                    snippet="Second note.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "Second",
+                    },
+                ),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-msg-3",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Other note.",
+                    headers={
+                        "From": "Grace Hopper <grace@example.com>",
+                        "Subject": "Other",
+                    },
+                ),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="human", machine_type=None),
+                "msg-2": classification("msg-2", category="human", machine_type=None),
+                "msg-3": classification("msg-3", category="human", machine_type=None),
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        people = payload["lanes"]["human"]["people"]
+        self.assertEqual(len(people), 2)
+        self.assertEqual(people[0]["name"], "Ada Lovelace")
+        self.assertEqual(people[0]["email"], "ada@example.com")
+        self.assertEqual(people[0]["count"], 2)
+        self.assertEqual(
+            [item["subject"] for item in people[0]["items"]],
+            ["First", "Second"],
+        )
+        self.assertEqual(people[1]["name"], "Grace Hopper")
 
     def test_review_type_counts_skip_non_needs_review_items(self) -> None:
         state = MailwyrmState(
@@ -382,6 +576,7 @@ class CockpitTest(unittest.TestCase):
         self.assertTrue(payload["message"]["has_body_text"])
         self.assertEqual(payload["classification"]["machine_type"], "delivery")
         self.assertIsNone(payload["classification"]["review_type"])
+        self.assertFalse(payload["review_resolution"]["available"])
         self.assertEqual(payload["suggested_action"]["action"], "trash_after_digest")
         self.assertTrue(payload["suggested_action"]["mutates_gmail"])
         self.assertEqual(payload["audit"][0]["action"], "archive_after_digest")
@@ -414,6 +609,13 @@ class CockpitTest(unittest.TestCase):
         payload = build_message_detail_payload(state, message_id="msg-1")
 
         self.assertEqual(payload["classification"]["review_type"], "security")
+        self.assertTrue(payload["review_resolution"]["available"])
+        self.assertEqual(
+            [resolution["id"] for resolution in payload["review_resolution"]["resolutions"]],
+            ["human"],
+        )
+        self.assertIn("marketing", payload["review_resolution"]["machine_types"])
+        self.assertIn("spam", payload["review_resolution"]["machine_types"])
 
     def test_build_message_detail_payload_defaults_missing_review_type(self) -> None:
         state = MailwyrmState(

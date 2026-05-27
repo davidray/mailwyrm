@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.utils import parseaddr
 from shlex import quote
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,8 @@ from mailwyrm.actions import (
 )
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import build_digest_items
+from mailwyrm.digest import build_digest_bundles
+from mailwyrm.models import MACHINE_TYPES
 from mailwyrm.store import MailwyrmState
 
 
@@ -43,10 +46,12 @@ def build_daily_cockpit_payload(
         raise ValueError("mailbox must be one of inbox, all-mail, or trash")
 
     title_date = title_date or datetime.now(UTC).date().isoformat()
-    action_plans = build_action_plans(state, limit=limit, mailbox=mailbox)
+    all_action_plans = build_action_plans(state, mailbox=mailbox)
+    action_plans = all_action_plans if limit is None else all_action_plans[:limit]
     trash_preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
     all_digest_items = build_digest_items(state)
     digest_items = all_digest_items if limit is None else all_digest_items[:limit]
+    digest_bundles = build_digest_bundles(state, limit=limit)
     attention_lanes = _attention_lanes(state, mailbox=mailbox, limit=limit)
     audit_events = sorted(
         state.label_audit_events,
@@ -61,6 +66,7 @@ def build_daily_cockpit_payload(
         "read_only": True,
         "account": {
             "email": state.account_email or "unknown",
+            "avatar_url": None,
             "last_sync_mailbox": state.last_sync_mailbox or "unknown",
             "indexed_messages": len(state.messages),
             "classified_messages": len(state.classifications),
@@ -89,10 +95,16 @@ def build_daily_cockpit_payload(
             "total_items": len(all_digest_items),
             "showing_items": len(digest_items),
             "items": [_digest_item_payload(item) for item in digest_items],
+            "bundles": [
+                _digest_bundle_payload(bundle, mailbox=mailbox, state=state)
+                for bundle in digest_bundles
+            ],
         },
         "mailbox_actions": {
             "mailbox": mailbox,
             "counts": _action_counts(action_plans),
+            "total_plans": len(all_action_plans),
+            "showing_plans": len(action_plans),
             "plans": [_action_plan_payload(plan, mailbox=mailbox) for plan in action_plans],
         },
         "trash_gate": {
@@ -274,9 +286,16 @@ def build_message_detail_payload(
                 "category": correction.category,
                 "machine_type": correction.machine_type,
                 "reason": correction.reason,
+                "suggested_actions": list(correction.suggested_actions or []),
+                "importance": correction.importance,
+                "automation_safety": correction.automation_safety,
             }
             if correction is not None
             else None
+        ),
+        "review_resolution": _review_resolution_payload(
+            classification=classification,
+            effective=effective,
         ),
         "suggested_action": (
             {
@@ -477,6 +496,7 @@ def _attention_lanes(
             "total_items": 0,
             "showing_items": 0,
             "items": [],
+            "people": [],
         },
         "needs_review": {
             "total_items": 0,
@@ -523,7 +543,41 @@ def _attention_lanes(
                 )
             )
             lane["showing_items"] += 1
+    lanes["human"]["people"] = _people_groups(lanes["human"]["items"])
     return lanes
+
+
+def _people_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        sender_name, sender_email = _person_from_sender(item["sender"])
+        key = sender_email.lower() if sender_email else sender_name.lower()
+        group = groups.setdefault(
+            key,
+            {
+                "name": sender_name,
+                "email": sender_email,
+                "sender": item["sender"],
+                "count": 0,
+                "items": [],
+                "order": len(groups),
+            },
+        )
+        group["count"] += 1
+        group["items"].append(item)
+    people = sorted(groups.values(), key=lambda group: group["order"])
+    for group in people:
+        del group["order"]
+    return people
+
+
+def _person_from_sender(sender: str) -> tuple[str, str]:
+    name, email = parseaddr(sender)
+    if not name and email:
+        name = email
+    if not name:
+        name = sender or "(unknown sender)"
+    return _single_line(name), _single_line(email)
 
 
 def _lane_name(category: str, action: str) -> str | None:
@@ -552,6 +606,95 @@ def _digest_item_payload(item) -> dict[str, Any]:
         "confidence": classification.confidence,
         "reason": classification.reason,
     }
+
+
+def _digest_bundle_payload(
+    bundle,
+    *,
+    mailbox: str,
+    state: MailwyrmState,
+) -> dict[str, Any]:
+    followup_count = sum(
+        1 for item in bundle.items if item.message.id in state.followups
+    )
+    return {
+        "machine_type": bundle.machine_type,
+        "title": bundle.title,
+        "count": bundle.count,
+        "followup_count": followup_count,
+        "mailbox": mailbox,
+        "action": "trash",
+        "action_label": f"Got it: trash {bundle.title.lower()}",
+        "sender_groups": _digest_sender_groups(
+            bundle.items,
+            state=state,
+            group_by_sender=_group_digest_category_by_sender(bundle.machine_type),
+        ),
+    }
+
+
+def _group_digest_category_by_sender(machine_type: str) -> bool:
+    return machine_type != "news"
+
+
+def _digest_sender_groups(
+    items,
+    *,
+    state: MailwyrmState,
+    group_by_sender: bool,
+) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        sender = _header(item.message, "From", "(unknown sender)")
+        sender_name, sender_email = _person_from_sender(sender)
+        key = (
+            sender_email.lower()
+            if group_by_sender and sender_email
+            else sender_name.lower()
+        )
+        if not group_by_sender:
+            key = item.message.id
+        group = groups.setdefault(
+            key,
+            {
+                "sender": sender,
+                "sender_name": sender_name,
+                "sender_email": sender_email,
+                "count": 0,
+                "message_ids": [],
+                "followup_count": 0,
+                "subjects": [],
+                "summaries": [],
+                "gmail_url": _gmail_url(item.message.id),
+                "order": len(groups),
+            },
+        )
+        group["count"] += 1
+        group["message_ids"].append(item.message.id)
+        if item.message.id in state.followups:
+            group["followup_count"] += 1
+        group["subjects"].append(_header(item.message, "Subject", "(no subject)"))
+        summary = _clean_snippet(item.message.body_text or item.message.snippet)
+        if summary:
+            group["summaries"].append(summary)
+
+    sender_groups = sorted(groups.values(), key=lambda group: group["order"])
+    for group in sender_groups:
+        del group["order"]
+        group["subject"] = group["subjects"][0] if group["count"] == 1 else ""
+        group["summary"] = _digest_sender_summary(group)
+        del group["summaries"]
+    return sender_groups
+
+
+def _digest_sender_summary(group: dict[str, Any]) -> str:
+    subjects = group["subjects"]
+    if group["count"] == 1:
+        return group["summaries"][0] if group["summaries"] else subjects[0]
+    shown_subjects = "; ".join(subjects[:3])
+    hidden = group["count"] - 3
+    suffix = f"; +{hidden} more" if hidden > 0 else ""
+    return f"{group['count']} messages: {shown_subjects}{suffix}"
 
 
 def _lane_item_payload(
@@ -607,6 +750,26 @@ def _classification_payload(classification) -> dict[str, Any]:
         "reason": classification.reason,
         "suggested_actions": list(classification.suggested_actions),
         "classifier_version": classification.classifier_version,
+    }
+
+
+def _review_resolution_payload(*, classification, effective) -> dict[str, Any]:
+    is_review = (
+        classification is not None
+        and classification.category == "needs_review"
+        and (effective is None or effective.category == "needs_review")
+    )
+    return {
+        "available": bool(is_review),
+        "resolutions": [
+            {
+                "id": "human",
+                "label": "Real People",
+                "description": "Move to Real People.",
+                "requires_machine_type": False,
+            },
+        ],
+        "machine_types": list(MACHINE_TYPES),
     }
 
 

@@ -11,6 +11,7 @@ This setup step is explicit. It creates labels only; it does not apply labels to
 - `Mailwyrm/Needs Review`
 - `Mailwyrm/Digested`
 - `Mailwyrm/Protected`
+- `Mailwyrm/Follow Up`
 
 ## Commands
 
@@ -35,4 +36,3 @@ https://www.googleapis.com/auth/gmail.modify
 ```
 
 Mailwyrm should continue using read-only flows for sync. The modify scope is introduced only for explicit Gmail-visible state changes.
-

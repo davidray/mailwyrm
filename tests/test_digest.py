@@ -1,6 +1,11 @@
 import unittest
 
-from mailwyrm.digest import mark_digest_items, message_has_been_digested, render_digest
+from mailwyrm.digest import (
+    build_digest_bundles,
+    mark_digest_items,
+    message_has_been_digested,
+    render_digest,
+)
 from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
@@ -89,6 +94,31 @@ class DigestTest(unittest.TestCase):
         self.assertIn("# Mailwyrm Machine Digest - 2026-05-25", digest)
         self.assertIn("## Transactional", digest)
         self.assertIn("[Your receipt](https://mail.google.com/mail/u/0/#inbox/msg-1)", digest)
+
+    def test_build_digest_bundles_groups_machine_messages_by_type(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Top story"),
+                "msg-2": message("msg-2", "Flash sale"),
+                "msg-3": message("msg-3", "Second story"),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="machine", machine_type="news"),
+                "msg-2": classification(
+                    "msg-2",
+                    category="machine",
+                    machine_type="marketing",
+                ),
+                "msg-3": classification("msg-3", category="machine", machine_type="news"),
+            },
+        )
+
+        bundles = build_digest_bundles(state)
+
+        news = next(bundle for bundle in bundles if bundle.machine_type == "news")
+        self.assertEqual(news.title, "News")
+        self.assertEqual(news.message_ids, ["msg-1", "msg-3"])
+        self.assertEqual(news.count, 2)
 
     def test_digest_excludes_human_messages(self) -> None:
         state = MailwyrmState(

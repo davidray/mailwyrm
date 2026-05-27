@@ -2,6 +2,7 @@ import unittest
 
 from mailwyrm.actions import (
     ACTION_ARCHIVE_AFTER_DIGEST,
+    ACTION_COMPLETE_CONVERSATION,
     ACTION_KEEP,
     ACTION_PROTECT,
     ACTION_REVIEW,
@@ -12,12 +13,14 @@ from mailwyrm.actions import (
     apply_trash_action_preview,
     build_action_plans,
     build_trash_preview,
+    complete_conversation,
     plan_action,
     render_action_audit,
     render_action_preview,
     render_trash_preview,
     restore_archived_message,
     restore_trashed_message,
+    trash_digest_bundle,
 )
 from mailwyrm.models import (
     AutomationPolicy,
@@ -173,7 +176,7 @@ class ActionsTest(unittest.TestCase):
             },
         )
 
-        plans = build_action_plans(state)
+        plans = build_action_plans(state, mailbox="all-mail")
 
         self.assertEqual(plans[0].action, ACTION_ARCHIVE_AFTER_DIGEST)
 
@@ -402,6 +405,61 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(state.messages["msg-1"].label_ids, [])
         self.assertEqual(state.label_audit_events, [])
 
+    def test_complete_conversation_archives_thread_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", label_ids=["INBOX", "Label_1"]),
+                "msg-2": message("msg-2", label_ids=["INBOX"]),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-2",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Snippet",
+                    headers={"Subject": "Other"},
+                ),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="human", machine_type=None),
+                "msg-2": classification("msg-2", category="human", machine_type=None),
+            },
+        )
+        client = FakeGmailClient()
+
+        result = complete_conversation(client, state, thread_id="thread-1")
+
+        self.assertEqual(result.applied, 2)
+        self.assertEqual(result.skipped_not_in_inbox, 0)
+        self.assertEqual(client.thread_removed, [("thread-1", ["INBOX"])])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1"])
+        self.assertEqual(state.messages["msg-2"].label_ids, [])
+        self.assertEqual(state.messages["msg-3"].label_ids, ["INBOX"])
+        self.assertEqual(
+            [event.action for event in state.label_audit_events],
+            [ACTION_COMPLETE_CONVERSATION, ACTION_COMPLETE_CONVERSATION],
+        )
+
+    def test_complete_conversation_skips_already_archived_thread(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=[])},
+        )
+        client = FakeGmailClient()
+
+        result = complete_conversation(client, state, thread_id="thread-1")
+
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_not_in_inbox, 1)
+        self.assertEqual(client.thread_removed, [])
+        self.assertEqual(state.label_audit_events, [])
+
+    def test_complete_conversation_rejects_unknown_thread(self) -> None:
+        state = MailwyrmState()
+        client = FakeGmailClient()
+
+        with self.assertRaisesRegex(ValueError, "not in the local index"):
+            complete_conversation(client, state, thread_id="thread-1")
+
     def test_apply_trash_action_preview_uses_gmail_trash_and_audits(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", label_ids=["INBOX", "Label_1"])},
@@ -485,6 +543,60 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(client.trashed, [])
         self.assertEqual(state.messages["msg-1"].label_ids, ["TRASH"])
         self.assertEqual(state.label_audit_events, [])
+
+    def test_trash_digest_bundle_trashes_all_bundle_plans(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", label_ids=["INBOX", "Label_1"]),
+                "msg-2": message("msg-2", label_ids=["TRASH"]),
+            },
+            classifications={
+                "msg-1": classification("msg-1", machine_type="news"),
+                "msg-2": classification("msg-2", machine_type="news"),
+            },
+        )
+        plans = build_action_plans(state, mailbox="all-mail")
+        client = FakeGmailClient()
+
+        result = trash_digest_bundle(client, state, plans)
+
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.skipped_already_trashed, 1)
+        self.assertEqual(client.trashed, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1", "TRASH"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_TRASH_AFTER_DIGEST)
+        self.assertIn("Got it", state.label_audit_events[0].reason)
+
+    def test_trash_digest_bundle_skips_followup_messages(self) -> None:
+        from mailwyrm.models import FollowUpMarker
+
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", label_ids=["INBOX", "Label_1"]),
+                "msg-2": message("msg-2", label_ids=["INBOX", "Label_1"]),
+            },
+            classifications={
+                "msg-1": classification("msg-1", machine_type="news"),
+                "msg-2": classification("msg-2", machine_type="news"),
+            },
+            followups={
+                "msg-1": FollowUpMarker(
+                    message_id="msg-1",
+                    reason="Needs a reply.",
+                    created_at="2026-05-25T00:00:00+00:00",
+                )
+            },
+        )
+        plans = build_action_plans(state, mailbox="inbox")
+        client = FakeGmailClient()
+
+        result = trash_digest_bundle(client, state, plans)
+
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.skipped_followup, 1)
+        self.assertEqual(client.trashed, ["msg-2"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX", "Label_1"])
+        self.assertIn("msg-1", state.followups)
 
     def test_render_action_audit_reports_recent_events(self) -> None:
         state = MailwyrmState(
@@ -639,6 +751,7 @@ class FakeGmailClient:
     def __init__(self) -> None:
         self.added: list[tuple[str, list[str]]] = []
         self.removed: list[tuple[str, list[str]]] = []
+        self.thread_removed: list[tuple[str, list[str]]] = []
         self.modified: list[tuple[str, list[str], list[str]]] = []
         self.trashed: list[str] = []
 
@@ -647,6 +760,9 @@ class FakeGmailClient:
 
     def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
         self.removed.append((message_id, label_ids))
+
+    def remove_labels_from_thread(self, thread_id: str, label_ids: list[str]) -> None:
+        self.thread_removed.append((thread_id, label_ids))
 
     def modify_message_labels(
         self,

@@ -28,6 +28,7 @@ Expected labels:
 - `Mailwyrm/Needs Review`
 - `Mailwyrm/Digested`
 - `Mailwyrm/Protected`
+- `Mailwyrm/Follow Up`
 
 Labels should be visible in Gmail so users can understand and repair state outside Mailwyrm.
 
@@ -54,6 +55,7 @@ The local database may contain:
 - Classification outputs.
 - Summaries.
 - User policy.
+- Follow-up markers that intentionally block digest cleanup.
 - Audit events.
 - Sync cursors.
 
@@ -86,4 +88,3 @@ Every AI-assisted mailbox action should record:
 - Timestamp.
 - Model or classifier version.
 - Undo or remediation path when possible.
-

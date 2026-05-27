@@ -7,6 +7,7 @@ from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
+    FollowUpMarker,
     LabelAuditEvent,
     MessageRecord,
 )
@@ -54,6 +55,13 @@ class StoreTest(unittest.TestCase):
                         reason="Known newsletter.",
                     )
                 },
+                followups={
+                    "msg-1": FollowUpMarker(
+                        message_id="msg-1",
+                        reason="Needs a reply.",
+                        created_at="2026-05-25T00:00:00+00:00",
+                    )
+                },
                 digest_audit_events=[
                     DigestAuditEvent(
                         message_id="msg-1",
@@ -91,6 +99,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.classifications["msg-1"].category, "needs_review")
         self.assertEqual(loaded.classifications["msg-1"].review_type, "possible_human")
         self.assertEqual(loaded.corrections["msg-1"].machine_type, "newsletter")
+        self.assertEqual(loaded.followups["msg-1"].reason, "Needs a reply.")
         self.assertEqual(loaded.digest_audit_events[0].message_id, "msg-1")
         self.assertEqual(loaded.label_audit_events[0].label_ids, ["Label_1"])
         self.assertTrue(loaded.automation_policy.archive_after_digest_enabled)

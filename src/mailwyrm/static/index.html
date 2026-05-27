@@ -20,32 +20,60 @@
             <option value="trash">Trash</option>
           </select>
           <button id="refresh" type="button">Refresh</button>
+          <div class="profile-menu">
+            <button
+              class="profile-avatar"
+              id="profile-avatar"
+              type="button"
+              aria-label="Account status"
+              aria-expanded="false"
+            ></button>
+            <section class="profile-popover" id="profile-popover" hidden></section>
+          </div>
         </div>
       </header>
 
-      <section class="status-strip" id="status-strip"></section>
+      <nav class="tabs" aria-label="Mailwyrm views">
+        <button class="tab active" type="button" data-tab="people">Real People</button>
+        <button class="tab" type="button" data-tab="digest">Daily Digest</button>
+        <button class="tab" type="button" data-tab="review">Review</button>
+        <button class="tab secondary-tab" type="button" data-tab="tools">Tools</button>
+      </nav>
 
-      <section class="cleanup-band" id="cleanup"></section>
+      <section class="grid metrics" id="metrics" hidden></section>
 
-      <section class="grid metrics" id="metrics"></section>
-
-      <section class="grid attention-lanes">
+      <section class="tab-panel active" id="tab-people">
         <section class="panel lane-panel primary-lane">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Human correspondence</p>
-              <h2>People</h2>
+              <p class="eyebrow">Real People</p>
+              <h2>Inbox</h2>
             </div>
             <span class="counter" id="human-count"></span>
           </div>
           <div class="item-list" id="human-lane"></div>
         </section>
+      </section>
 
+      <section class="tab-panel" id="tab-digest" hidden>
+        <section class="panel digest-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Machine correspondence</p>
+              <h2>Daily Digest</h2>
+            </div>
+            <span class="counter" id="digest-count"></span>
+          </div>
+          <div class="item-list" id="digest"></div>
+        </section>
+      </section>
+
+      <section class="tab-panel" id="tab-review" hidden>
         <section class="panel lane-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Needs review</p>
-              <h2>Protected</h2>
+              <p class="eyebrow">Review</p>
+              <h2>Protected and uncertain</h2>
             </div>
             <span class="counter" id="review-count"></span>
           </div>
@@ -53,18 +81,7 @@
         </section>
       </section>
 
-      <section class="grid two-column main-grid">
-        <section class="panel digest-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Machine correspondence</p>
-              <h2>Digest</h2>
-            </div>
-            <span class="counter" id="digest-count"></span>
-          </div>
-          <div class="item-list" id="digest"></div>
-        </section>
-
+      <section class="tab-panel" id="tab-tools" hidden>
         <section class="panel">
           <div class="panel-heading">
             <div>
@@ -74,9 +91,7 @@
           </div>
           <div class="item-list compact" id="actions"></div>
         </section>
-      </section>
 
-      <section class="grid two-column">
         <section class="panel">
           <div class="panel-heading">
             <div>
@@ -85,6 +100,27 @@
             </div>
           </div>
           <div class="item-list compact" id="trash"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Gmail mutations</p>
+              <h2>Recent audit</h2>
+            </div>
+            <span class="counter" id="audit-count"></span>
+          </div>
+          <div class="audit-table" id="audit"></div>
+        </section>
+
+        <section class="panel workflows-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Workflow controls</p>
+              <h2>Preview-first actions</h2>
+            </div>
+          </div>
+          <div class="workflow-grid" id="workflows"></div>
         </section>
       </section>
 
@@ -97,27 +133,6 @@
           <button id="detail-close" type="button">Close</button>
         </div>
         <div class="detail-content" id="detail-content"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Gmail mutations</p>
-            <h2>Recent audit</h2>
-          </div>
-          <span class="counter" id="audit-count"></span>
-        </div>
-        <div class="audit-table" id="audit"></div>
-      </section>
-
-      <section class="panel workflows-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Workflow controls</p>
-            <h2>Preview-first actions</h2>
-          </div>
-        </div>
-        <div class="workflow-grid" id="workflows"></div>
       </section>
 
       <section class="panel preview-panel" id="preview-panel" hidden>

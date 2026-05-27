@@ -9,6 +9,11 @@ from mailwyrm.app import (
     _query_mailbox,
     _query_message_id,
     _query_workflow,
+    _bundle_trash_plans,
+    _request_bool,
+    _request_mailbox,
+    _request_string,
+    _request_string_list,
     build_workflow_preview_payload,
     classify_local_messages,
     create_app_server,
@@ -55,14 +60,44 @@ class AppTest(unittest.TestCase):
 
         self.assertIn("<title>Mailwyrm</title>", static_root.joinpath("index.html").read_text())
         self.assertIn("Daily cockpit", static_root.joinpath("index.html").read_text())
+        self.assertIn("Real People", static_root.joinpath("index.html").read_text())
+        self.assertIn("Daily Digest", static_root.joinpath("index.html").read_text())
+        self.assertIn('data-tab="review"', static_root.joinpath("index.html").read_text())
+        self.assertIn('data-tab="tools"', static_root.joinpath("index.html").read_text())
+        self.assertIn("secondary-tab", static_root.joinpath("index.html").read_text())
+        self.assertIn("tab-panel", static_root.joinpath("index.html").read_text())
+        self.assertIn("profile-avatar", static_root.joinpath("index.html").read_text())
+        self.assertIn("profile-popover", static_root.joinpath("index.html").read_text())
+        self.assertNotIn("status-strip", static_root.joinpath("index.html").read_text())
+        self.assertIn('id="metrics" hidden', static_root.joinpath("index.html").read_text())
         self.assertIn("human-lane", static_root.joinpath("index.html").read_text())
         self.assertIn("review-lane", static_root.joinpath("index.html").read_text())
-        self.assertIn("cleanup", static_root.joinpath("index.html").read_text())
+        self.assertNotIn("cleanup-band", static_root.joinpath("index.html").read_text())
         self.assertIn("workflows", static_root.joinpath("index.html").read_text())
         self.assertIn("/api/daily-cockpit", static_root.joinpath("app.js").read_text())
-        self.assertIn("renderCleanup", static_root.joinpath("app.js").read_text())
-        self.assertIn("cleanupHeading", static_root.joinpath("app.js").read_text())
-        self.assertIn("cleanup-band", static_root.joinpath("app.css").read_text())
+        self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
+        self.assertIn("renderProfile", static_root.joinpath("app.js").read_text())
+        self.assertIn("profileInitial", static_root.joinpath("app.js").read_text())
+        self.assertIn("Real People", static_root.joinpath("app.js").read_text())
+        self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
+        self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
+        self.assertIn("personInitials", static_root.joinpath("app.js").read_text())
+        self.assertIn("prominentSender", static_root.joinpath("app.js").read_text())
+        self.assertIn("showAllLaneItems", static_root.joinpath("app.js").read_text())
+        self.assertIn("showAllItems", static_root.joinpath("app.js").read_text())
+        self.assertIn("review-sender", static_root.joinpath("app.css").read_text())
+        self.assertIn("lane-more", static_root.joinpath("app.css").read_text())
+        self.assertIn("person-name", static_root.joinpath("app.js").read_text())
+        self.assertIn("person-identity", static_root.joinpath("app.css").read_text())
+        self.assertIn("profile-popover", static_root.joinpath("app.css").read_text())
+        self.assertIn("person-avatar", static_root.joinpath("app.css").read_text())
+        self.assertIn("person-group", static_root.joinpath("app.css").read_text())
+        self.assertIn(".person-group:first-child", static_root.joinpath("app.css").read_text())
+        self.assertNotIn("renderCleanup", static_root.joinpath("app.js").read_text())
+        self.assertNotIn("cleanupHeading", static_root.joinpath("app.js").read_text())
+        self.assertIn(".tabs", static_root.joinpath("app.css").read_text())
+        self.assertIn(".secondary-tab", static_root.joinpath("app.css").read_text())
+        self.assertNotIn("cleanup-band", static_root.joinpath("app.css").read_text())
         self.assertNotIn("copy-command", static_root.joinpath("app.js").read_text())
         self.assertNotIn("command-text", static_root.joinpath("app.js").read_text())
         self.assertNotIn("commands-panel", static_root.joinpath("index.html").read_text())
@@ -71,6 +106,9 @@ class AppTest(unittest.TestCase):
         self.assertIn("/api/message-detail", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/local-classify", static_root.joinpath("app.js").read_text())
         self.assertIn('"X-Mailwyrm-App": "local-ui"', static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/conversation-complete", static_root.joinpath("app.js").read_text())
+        self.assertIn("completeConversation", static_root.joinpath("app.js").read_text())
+        self.assertIn("complete-conversation", static_root.joinpath("app.css").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("detail-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("view-detail", static_root.joinpath("app.js").read_text())
@@ -79,8 +117,31 @@ class AppTest(unittest.TestCase):
         self.assertIn("noopener noreferrer", static_root.joinpath("app.js").read_text())
         self.assertIn("overflow: auto", static_root.joinpath("app.css").read_text())
         self.assertIn("run-local-action", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/review-resolution", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/machine-bundle/got-it", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/followup", static_root.joinpath("app.js").read_text())
+        self.assertIn("machineBundleCard", static_root.joinpath("app.js").read_text())
+        self.assertIn("followupButton", static_root.joinpath("app.js").read_text())
+        self.assertIn("sender_groups", static_root.joinpath("app.js").read_text())
+        self.assertIn("digest-row-heading", static_root.joinpath("app.css").read_text())
+        self.assertIn("digest-subject", static_root.joinpath("app.css").read_text())
+        self.assertIn("followup-toggle", static_root.joinpath("app.css").read_text())
+        self.assertIn("bundle-got-it", static_root.joinpath("app.css").read_text())
+        self.assertIn("reviewResolutionSection", static_root.joinpath("app.js").read_text())
+        self.assertIn("inlineReviewControls", static_root.joinpath("app.js").read_text())
+        self.assertIn("User resolved this from the Review card.", static_root.joinpath("app.js").read_text())
+        self.assertIn("machineTypeLabel", static_root.joinpath("app.js").read_text())
+        self.assertIn("Spam", static_root.joinpath("app.js").read_text())
+        self.assertNotIn('["protect", "Protect"', static_root.joinpath("app.js").read_text())
+        self.assertNotIn('["archive", "Archive"', static_root.joinpath("app.js").read_text())
+        self.assertNotIn('["trash", "Trash"', static_root.joinpath("app.js").read_text())
+        self.assertIn("Real People", static_root.joinpath("app.js").read_text())
+        self.assertIn("resolution-controls", static_root.joinpath("app.css").read_text())
+        self.assertIn("inline-review-controls", static_root.joinpath("app.css").read_text())
+        self.assertIn("showReason", static_root.joinpath("app.js").read_text())
+        self.assertIn("-webkit-line-clamp: 2", static_root.joinpath("app.css").read_text())
         self.assertIn(
-            "Local app view; Gmail mutations require CLI",
+            "Explicit app actions can update Gmail",
             static_root.joinpath("app.js").read_text(),
         )
 
@@ -134,10 +195,16 @@ class AppTest(unittest.TestCase):
         parser = build_parser()
 
         args = parser.parse_args(
-            ["app", "--client-secret", "/Users/dave/code/client_secret.json"]
+            [
+                "app",
+                "--client-secret",
+                "/Users/dave/code/client_secret.json",
+                "--show-metrics",
+            ]
         )
 
         self.assertEqual(str(args.client_secret), "/Users/dave/code/client_secret.json")
+        self.assertTrue(args.show_metrics)
 
     def test_build_workflow_preview_payload_renders_daily_preview(self) -> None:
         state = MailwyrmState(
@@ -296,6 +363,65 @@ class AppTest(unittest.TestCase):
         self.assertTrue(
             _is_app_mutation_request({APP_MUTATION_HEADER: APP_MUTATION_HEADER_VALUE})
         )
+
+    def test_request_string_helpers_validate_review_resolution_inputs(self) -> None:
+        self.assertEqual(_request_string({"message_id": "msg-1"}, "message_id"), "msg-1")
+        self.assertEqual(_request_mailbox({"mailbox": "all-mail"}, "inbox"), "all-mail")
+        self.assertEqual(_request_mailbox({}, "inbox"), "inbox")
+        self.assertEqual(
+            _request_string_list({"message_ids": ["msg-1"]}, "message_ids"),
+            ["msg-1"],
+        )
+        self.assertTrue(_request_bool({"followup": True}, "followup"))
+
+        with self.assertRaises(ValueError):
+            _request_string({}, "message_id")
+
+        with self.assertRaises(ValueError):
+            _request_mailbox({"mailbox": "spam"}, "inbox")
+
+        with self.assertRaises(ValueError):
+            _request_string_list({"message_ids": []}, "message_ids")
+
+        with self.assertRaises(ValueError):
+            _request_bool({"followup": "true"}, "followup")
+
+    def test_bundle_trash_plans_select_machine_bundle_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Top story"),
+                "msg-2": message("msg-2", "Receipt"),
+            },
+            classifications={
+                "msg-1": ClassificationRecord(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="news",
+                    importance="low",
+                    automation_safety="high",
+                    confidence=0.95,
+                    reason="News digest.",
+                    suggested_actions=["digest"],
+                    classifier_version="rules-v0",
+                ),
+                "msg-2": ClassificationRecord(
+                    message_id="msg-2",
+                    category="machine",
+                    machine_type="transactional",
+                    importance="medium",
+                    automation_safety="medium",
+                    confidence=0.82,
+                    reason="Receipt.",
+                    suggested_actions=["digest"],
+                    classifier_version="rules-v0",
+                ),
+            },
+        )
+
+        plans = _bundle_trash_plans(state, "news", mailbox="inbox")
+
+        self.assertEqual([plan.message.id for plan in plans], ["msg-1"])
+        self.assertEqual(plans[0].action, "trash_after_digest")
 
     def test_classify_local_messages_rejects_invalid_inputs(self) -> None:
         with self.assertRaises(ValueError):

@@ -52,7 +52,24 @@ Good digest items include:
 
 Avoid vague summaries such as "You received an update from..." when the message contains concrete information.
 
+When the user marks digest mail as needing follow-up, that marker is a user
+decision rather than an AI classification. AI cleanup and digest actions must
+respect it: marked messages should not be archived, trashed, or otherwise
+cleared by "Got it" until the marker is explicitly removed.
+
 ## Policy Learning
+
+Review actions are learning signals. When the user resolves a message from
+Review into Real People or a machine-mail category, Mailwyrm records a local
+classification correction for that message. The corrected classification should
+immediately drive the current cockpit: machine resolutions leave Review and
+appear in the selected machine digest category, while human resolutions move
+into Real People.
+
+Spam is a special machine category. Once Gmail mutation support exists for spam
+handling, user-confirmed spam should be reported or moved to Gmail Spam and
+Mailwyrm should attempt a safe unsubscribe when the message exposes a trustworthy
+unsubscribe option. Spam should not be treated as a generic archive decision.
 
 Mailwyrm may suggest durable policies based on repeated user behavior, but the user should approve policies before they cause destructive actions.
 

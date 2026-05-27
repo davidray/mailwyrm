@@ -6,6 +6,7 @@ from pathlib import Path
 
 APP_DIR_ENV = "MAILWYRM_HOME"
 CLIENT_SECRET_ENV = "MAILWYRM_CLIENT_SECRET"
+SHOW_METRICS_ENV = "MAILWYRM_SHOW_METRICS"
 DEFAULT_APP_DIR = Path.home() / ".mailwyrm"
 
 
@@ -25,3 +26,8 @@ def state_path() -> Path:
 def client_secret_path() -> Path | None:
     configured = os.environ.get(CLIENT_SECRET_ENV)
     return Path(configured).expanduser() if configured else None
+
+
+def show_metrics_enabled() -> bool:
+    configured = os.environ.get(SHOW_METRICS_ENV, "")
+    return configured.strip().lower() in {"1", "true", "yes", "on"}

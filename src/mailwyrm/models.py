@@ -19,6 +19,7 @@ MAILWYRM_LABEL_NAMES = (
     "Mailwyrm/Needs Review",
     "Mailwyrm/Digested",
     "Mailwyrm/Protected",
+    "Mailwyrm/Follow Up",
 )
 
 
@@ -259,6 +260,9 @@ class ClassificationCorrection:
     category: ClassificationCategory
     machine_type: str | None
     reason: str
+    suggested_actions: list[str] | None = None
+    importance: Importance | None = None
+    automation_safety: AutomationSafety | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -270,6 +274,19 @@ class ClassificationCorrection:
             category=str(data["category"]),
             machine_type=data.get("machine_type"),
             reason=str(data.get("reason", "")),
+            suggested_actions=(
+                None
+                if data.get("suggested_actions") is None
+                else [str(action) for action in data.get("suggested_actions", [])]
+            ),
+            importance=(
+                None if data.get("importance") is None else str(data.get("importance"))
+            ),
+            automation_safety=(
+                None
+                if data.get("automation_safety") is None
+                else str(data.get("automation_safety"))
+            ),
         )
 
 
@@ -317,6 +334,24 @@ class DigestAuditEvent:
             digest_title_date=str(data["digest_title_date"]),
             reason=str(data.get("reason", "")),
             classifier_version=str(data.get("classifier_version", "")),
+            created_at=str(data["created_at"]),
+        )
+
+
+@dataclass(frozen=True)
+class FollowUpMarker:
+    message_id: str
+    reason: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FollowUpMarker":
+        return cls(
+            message_id=str(data["message_id"]),
+            reason=str(data.get("reason", "")),
             created_at=str(data["created_at"]),
         )
 

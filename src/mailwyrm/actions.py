@@ -13,6 +13,7 @@ ACTION_KEEP = "keep"
 ACTION_REVIEW = "review"
 ACTION_PROTECT = "protect"
 ACTION_ARCHIVE_AFTER_DIGEST = "archive_after_digest"
+ACTION_COMPLETE_CONVERSATION = "complete_conversation"
 ACTION_RESTORE_ARCHIVE = "restore_archive"
 ACTION_RESTORE_TRASH = "restore_trash"
 ACTION_TRASH_AFTER_DIGEST = "trash_after_digest"
@@ -32,6 +33,13 @@ class ActionPlan:
 class ArchiveApplyResult:
     applied: int = 0
     skipped_not_digested: int = 0
+    skipped_followup: int = 0
+
+
+@dataclass(frozen=True)
+class ConversationCompleteResult:
+    applied: int = 0
+    skipped_not_in_inbox: int = 0
 
 
 @dataclass(frozen=True)
@@ -40,6 +48,14 @@ class TrashApplyResult:
     skipped_policy_disabled: int = 0
     skipped_not_digested: int = 0
     skipped_already_trashed: int = 0
+    skipped_followup: int = 0
+
+
+@dataclass(frozen=True)
+class BundleTrashResult:
+    applied: int = 0
+    skipped_already_trashed: int = 0
+    skipped_followup: int = 0
 
 
 @dataclass(frozen=True)
@@ -49,6 +65,7 @@ class TrashPreview:
     skipped_policy_disabled: int = 0
     skipped_not_digested: int = 0
     skipped_already_trashed: int = 0
+    skipped_followup: int = 0
 
 
 def build_action_plans(
@@ -111,9 +128,13 @@ def build_trash_preview(
     eligible_plans: list[ActionPlan] = []
     skipped_not_digested = 0
     skipped_already_trashed = 0
+    skipped_followup = 0
     for plan in trash_plans:
         if plan.message.id not in digested_message_ids:
             skipped_not_digested += 1
+            continue
+        if plan.message.id in state.followups:
+            skipped_followup += 1
             continue
         if GMAIL_TRASH_LABEL in plan.message.label_ids:
             skipped_already_trashed += 1
@@ -127,6 +148,7 @@ def build_trash_preview(
         policy_enabled=True,
         skipped_not_digested=skipped_not_digested,
         skipped_already_trashed=skipped_already_trashed,
+        skipped_followup=skipped_followup,
     )
 
 
@@ -248,6 +270,8 @@ def render_trash_preview(
         lines.append(
             f"Skipped because already in Trash: {preview.skipped_already_trashed}"
         )
+    if preview.skipped_followup:
+        lines.append(f"Skipped for follow-up: {preview.skipped_followup}")
 
     if not preview.plans:
         lines.extend(["", "No messages are eligible for trash preview."])
@@ -321,6 +345,7 @@ def apply_archive_action_plans(
 ) -> ArchiveApplyResult:
     applied = 0
     skipped_not_digested = 0
+    skipped_followup = 0
     digested_message_ids = {
         event.message_id for event in state.digest_audit_events
     }
@@ -331,6 +356,9 @@ def apply_archive_action_plans(
             continue
         if plan.message.id not in digested_message_ids:
             skipped_not_digested += 1
+            continue
+        if plan.message.id in state.followups:
+            skipped_followup += 1
             continue
 
         client.remove_labels_from_message(plan.message.id, [GMAIL_INBOX_LABEL])
@@ -357,6 +385,58 @@ def apply_archive_action_plans(
     return ArchiveApplyResult(
         applied=applied,
         skipped_not_digested=skipped_not_digested,
+        skipped_followup=skipped_followup,
+    )
+
+
+def complete_conversation(
+    client: GmailClient,
+    state: MailwyrmState,
+    *,
+    thread_id: str,
+) -> ConversationCompleteResult:
+    thread_messages = [
+        message for message in state.messages.values() if message.thread_id == thread_id
+    ]
+    if not thread_messages:
+        raise ValueError(f"thread {thread_id} is not in the local index")
+
+    inbox_messages = [
+        message for message in thread_messages if GMAIL_INBOX_LABEL in message.label_ids
+    ]
+    if not inbox_messages:
+        return ConversationCompleteResult(
+            skipped_not_in_inbox=len(thread_messages),
+        )
+
+    client.remove_labels_from_thread(thread_id, [GMAIL_INBOX_LABEL])
+    for message in inbox_messages:
+        state.messages[message.id] = replace(
+            message,
+            label_ids=[
+                label_id
+                for label_id in message.label_ids
+                if label_id != GMAIL_INBOX_LABEL
+            ],
+        )
+        classification = state.classifications.get(message.id)
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=message.id,
+                action=ACTION_COMPLETE_CONVERSATION,
+                label_names=[GMAIL_INBOX_LABEL],
+                label_ids=[GMAIL_INBOX_LABEL],
+                reason="User marked human conversation complete.",
+                classifier_version=(
+                    classification.classifier_version if classification else "manual"
+                ),
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+
+    return ConversationCompleteResult(
+        applied=len(inbox_messages),
+        skipped_not_in_inbox=len(thread_messages) - len(inbox_messages),
     )
 
 
@@ -370,6 +450,7 @@ def apply_trash_action_preview(
             skipped_policy_disabled=preview.skipped_policy_disabled,
             skipped_not_digested=preview.skipped_not_digested,
             skipped_already_trashed=preview.skipped_already_trashed,
+            skipped_followup=preview.skipped_followup,
         )
 
     applied = 0
@@ -411,6 +492,51 @@ def apply_trash_action_preview(
         skipped_already_trashed=(
             preview.skipped_already_trashed + skipped_already_trashed
         ),
+        skipped_followup=preview.skipped_followup,
+    )
+
+
+def trash_digest_bundle(
+    client: GmailClient,
+    state: MailwyrmState,
+    plans: list[ActionPlan],
+) -> BundleTrashResult:
+    applied = 0
+    skipped_already_trashed = 0
+    skipped_followup = 0
+    for plan in plans:
+        if plan.message.id in state.followups:
+            skipped_followup += 1
+            continue
+        if GMAIL_TRASH_LABEL in plan.message.label_ids:
+            skipped_already_trashed += 1
+            continue
+
+        client.trash_message(plan.message.id)
+        label_ids = [
+            label_id
+            for label_id in plan.message.label_ids
+            if label_id != GMAIL_INBOX_LABEL
+        ]
+        if GMAIL_TRASH_LABEL not in label_ids:
+            label_ids.append(GMAIL_TRASH_LABEL)
+        state.messages[plan.message.id] = replace(plan.message, label_ids=label_ids)
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=plan.message.id,
+                action=ACTION_TRASH_AFTER_DIGEST,
+                label_names=[GMAIL_TRASH_LABEL],
+                label_ids=[GMAIL_TRASH_LABEL],
+                reason=f"User clicked Got it for {plan.classification.machine_type} bundle.",
+                classifier_version=plan.classification.classifier_version,
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        applied += 1
+    return BundleTrashResult(
+        applied=applied,
+        skipped_already_trashed=skipped_already_trashed,
+        skipped_followup=skipped_followup,
     )
 
 

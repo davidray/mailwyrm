@@ -2,17 +2,27 @@ const state = {
   mailbox: "inbox",
   limit: 25,
   auditLimit: 10,
+  activeTab: "people",
 };
 
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
 const localActionWorkflows = new Set(["classify"]);
+const reviewMachineTypes = [
+  ["marketing", "Marketing"],
+  ["transactional", "Transactional"],
+  ["news", "News"],
+  ["product_community", "Community"],
+  ["spam", "Spam"],
+];
 
 const els = {
+  tabs: Array.from(document.querySelectorAll(".tab")),
+  tabPanels: Array.from(document.querySelectorAll(".tab-panel")),
   mailbox: document.querySelector("#mailbox"),
   refresh: document.querySelector("#refresh"),
-  status: document.querySelector("#status-strip"),
+  profileAvatar: document.querySelector("#profile-avatar"),
+  profilePopover: document.querySelector("#profile-popover"),
   metrics: document.querySelector("#metrics"),
-  cleanup: document.querySelector("#cleanup"),
   humanCount: document.querySelector("#human-count"),
   humanLane: document.querySelector("#human-lane"),
   reviewCount: document.querySelector("#review-count"),
@@ -34,11 +44,27 @@ const els = {
   detailClose: document.querySelector("#detail-close"),
 };
 
+for (const tab of els.tabs) {
+  tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+}
+
 els.mailbox.addEventListener("change", () => {
   state.mailbox = els.mailbox.value;
   loadCockpit();
 });
 els.refresh.addEventListener("click", loadCockpit);
+els.profileAvatar.addEventListener("click", () => {
+  const isOpen = !els.profilePopover.hidden;
+  els.profilePopover.hidden = isOpen;
+  els.profileAvatar.setAttribute("aria-expanded", isOpen ? "false" : "true");
+});
+document.addEventListener("click", (event) => {
+  if (event.target.closest(".profile-menu")) {
+    return;
+  }
+  els.profilePopover.hidden = true;
+  els.profileAvatar.setAttribute("aria-expanded", "false");
+});
 els.previewClose.addEventListener("click", () => {
   els.previewPanel.hidden = true;
 });
@@ -48,7 +74,22 @@ els.detailClose.addEventListener("click", () => {
 
 loadCockpit();
 
-async function loadCockpit() {
+function activateTab(tabName) {
+  state.activeTab = tabName;
+  for (const tab of els.tabs) {
+    const isActive = tab.dataset.tab === tabName;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+  for (const panel of els.tabPanels) {
+    const isActive = panel.id === `tab-${tabName}`;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
+  }
+}
+
+async function loadCockpit(options = {}) {
+  const scrollTop = options.preserveScroll ? window.scrollY : null;
   const params = new URLSearchParams({
     mailbox: state.mailbox,
     limit: String(state.limit),
@@ -62,6 +103,16 @@ async function loadCockpit() {
       return;
     }
     renderCockpit(payload);
+    if (scrollTop !== null) {
+      requestAnimationFrame(() => {
+        window.scrollTo({
+          top: Math.min(
+            scrollTop,
+            Math.max(0, document.body.scrollHeight - window.innerHeight)
+          ),
+        });
+      });
+    }
   } catch (error) {
     renderError(error.message || "Unable to load cockpit data.");
   }
@@ -77,30 +128,21 @@ async function parseJsonResponse(response) {
 
 function renderCockpit(payload) {
   document.title = `${payload.title} - ${payload.date}`;
-  els.status.innerHTML = "";
-  els.status.append(
-    div("div", {}, [
-      div("strong", {}, payload.account.email),
-      div(
-        "p",
-        {},
-        `${payload.account.indexed_messages} indexed, ${payload.account.classified_messages} classified`
-      ),
-    ]),
-    div("p", {}, `Last sync: ${payload.account.last_sync_mailbox}`),
-    div("p", { class: "read-only" }, "Local app view; Gmail mutations require CLI")
-  );
+  renderProfile(payload.account);
 
   renderMetrics(payload);
-  renderCleanup(payload.cleanup);
   renderLane(els.humanLane, els.humanCount, payload.lanes.human, {
     empty: "No human correspondence in this mailbox scope.",
     label: "people",
+    groupPeople: true,
   });
   renderLane(els.reviewLane, els.reviewCount, payload.lanes.needs_review, {
     empty: "No protected or uncertain messages in this mailbox scope.",
     label: "review",
     badge: (item) => item.review_type || item.action || "review",
+    showReason: true,
+    prominentSender: true,
+    reviewControls: true,
   });
   renderDigest(payload.digest);
   renderActions(payload.mailbox_actions);
@@ -109,72 +151,53 @@ function renderCockpit(payload) {
   renderWorkflows(payload.workflows);
 }
 
-function renderCleanup(cleanup) {
-  const archive = cleanup.archive;
-  const trash = cleanup.trash;
-  const statusText =
-    cleanup.clearable_now > 0
-      ? `${cleanup.clearable_now} ready to clear from ${cleanup.mailbox}`
-      : `Nothing is ready to clear from ${cleanup.mailbox}`;
-
-  els.cleanup.replaceChildren(
-    div("div", { class: "cleanup-summary" }, [
-      div("p", { class: "eyebrow" }, cleanupHeading(cleanup.mailbox)),
-      div("h2", {}, statusText),
-      div(
-        "p",
-        { class: "meta" },
-        `${cleanup.kept_human} human kept, ${cleanup.protected_or_review} protected or review`
-      ),
-    ]),
-    cleanupCard({
-      title: "Archive",
-      ready: archive.ready,
-      detail: `${archive.candidates} candidates, ${archive.waiting_for_digest} need digest first`,
-      previewWorkflow: "archive",
-    }),
-    cleanupCard({
-      title: "Trash",
-      ready: trash.ready,
-      detail: trash.policy_enabled
-        ? `${trash.candidates} candidates, ${trash.waiting_for_digest} need digest first`
-        : `${trash.candidates} candidates, trash policy off`,
-      previewWorkflow: "trash",
-      danger: true,
+function renderProfile(account) {
+  els.profileAvatar.replaceChildren(profileAvatarContent(account));
+  els.profilePopover.replaceChildren(
+    profileLine("Account", account.email),
+    profileLine(
+      "Local index",
+      `${account.indexed_messages} indexed, ${account.classified_messages} classified`
+    ),
+    profileLine("Last sync", account.last_sync_mailbox),
+    profileLine("Gmail updates", "Explicit app actions can update Gmail", {
+      strong: true,
     })
   );
 }
 
-function cleanupHeading(mailbox) {
-  if (mailbox === "all-mail") {
-    return "All mail cleanup";
+function profileAvatarContent(account) {
+  if (account.avatar_url) {
+    const image = document.createElement("img");
+    image.src = account.avatar_url;
+    image.alt = "";
+    return image;
   }
-  if (mailbox === "trash") {
-    return "Trash cleanup";
-  }
-  return "Inbox cleanup";
+  return div("span", {}, profileInitial(account.email));
 }
 
-function cleanupCard({ title, ready, detail, previewWorkflow, danger = false }) {
-  const preview = div("button", { type: "button", class: "preview-workflow" }, "Preview");
-  preview.addEventListener("click", () => loadWorkflowPreview(previewWorkflow, preview));
+function profileInitial(email) {
+  const value = email && email !== "unknown" ? email : "M";
+  return value.trim()[0].toUpperCase();
+}
 
-  return div("article", { class: `cleanup-card ${danger ? "danger" : ""}` }, [
-    div("div", { class: "cleanup-card-top" }, [
-      div("strong", {}, String(ready)),
-      div("span", {}, title),
-    ]),
-    div("p", { class: "meta" }, detail),
-    div("div", { class: "cleanup-actions" }, [
-      preview,
-    ]),
+function profileLine(label, value, options = {}) {
+  return div("div", { class: "profile-line" }, [
+    div("span", {}, label),
+    div(options.strong ? "strong" : "p", {}, value),
   ]);
 }
 
 function renderMetrics(payload) {
+  if (!payload.features || !payload.features.show_metrics) {
+    els.metrics.hidden = true;
+    els.metrics.replaceChildren();
+    return;
+  }
+  els.metrics.hidden = false;
   const actionCounts = payload.attention.actions;
   const metrics = [
-    ["Human", payload.attention.human],
+    ["Real People", payload.attention.human],
     ["Machine", payload.attention.machine],
     ["Needs review", payload.attention.needs_review],
     ["Protect", actionCounts.protect],
@@ -195,39 +218,229 @@ function renderMetrics(payload) {
 
 function renderLane(target, counter, lane, options) {
   counter.textContent = `${lane.showing_items} of ${lane.total_items}`;
+  const people = options.groupPeople ? lane.people || [] : [];
+  if (options.groupPeople && people.length) {
+    const groups = people.map((person) => personGroupCard(person, options));
+    if (lane.showing_items < lane.total_items) {
+      groups.push(showAllLaneItems(lane, options.label));
+    }
+    target.replaceChildren(...groups);
+    return;
+  }
   if (!lane.items.length) {
     renderEmpty(target, options.empty);
     return;
   }
-  target.replaceChildren(
-    ...lane.items.map((item) =>
-      messageCard(item, {
-        badge:
-          typeof options.badge === "function"
-            ? options.badge(item)
-            : item.action || options.label,
-        showSnippet: true,
-        mailbox: state.mailbox,
-      })
-    )
+  const cards = lane.items.map((item) =>
+    messageCard(item, {
+      badge:
+        typeof options.badge === "function"
+          ? options.badge(item)
+          : item.action || options.label,
+      showSnippet: true,
+      showReason: options.showReason || false,
+      prominentSender: options.prominentSender || false,
+      reviewControls: options.reviewControls || false,
+      mailbox: state.mailbox,
+    })
+  );
+  if (lane.showing_items < lane.total_items) {
+    cards.push(showAllLaneItems(lane, options.label));
+  }
+  target.replaceChildren(...cards);
+}
+
+function showAllLaneItems(lane, label) {
+  return showAllItems(
+    `Showing ${lane.showing_items} of ${lane.total_items} ${label} messages.`,
+    lane.total_items
   );
 }
 
+function showAllItems(message, totalItems) {
+  const button = div("button", { type: "button" }, "Show all");
+  button.addEventListener("click", async () => {
+    state.limit = Math.max(state.limit, totalItems);
+    await loadCockpit({ preserveScroll: true });
+  });
+  return div("div", { class: "lane-more" }, [div("p", {}, message), button]);
+}
+
+function personGroupCard(person, options) {
+  return div("article", { class: "person-group" }, [
+    div("div", { class: "person-header" }, [
+      div("div", { class: "person-identity" }, [
+        div("div", { class: "person-avatar" }, personInitials(person)),
+        div("div", {}, [
+          div("h3", { class: "person-name" }, person.name || person.email),
+          person.email && person.email !== person.name
+            ? div("p", { class: "person-email" }, person.email)
+            : "",
+        ]),
+      ]),
+      pill(`${person.count} message${person.count === 1 ? "" : "s"}`),
+    ]),
+    div(
+      "div",
+      { class: "person-messages" },
+      person.items.map((item) =>
+        messageCard(item, {
+          badge:
+            typeof options.badge === "function"
+              ? options.badge(item)
+              : item.action || options.label,
+          showSnippet: true,
+          showReason: options.showReason || false,
+          completeConversation: true,
+          compact: true,
+          showSender: false,
+          mailbox: state.mailbox,
+        })
+      )
+    ),
+  ]);
+}
+
+function personInitials(person) {
+  const source = person.name || person.email || "?";
+  const parts = source
+    .replace(/<.*>/, "")
+    .split(/[\s@._-]+/)
+    .filter(Boolean);
+  return (parts[0]?.[0] || "?").toUpperCase();
+}
+
 function renderDigest(digest) {
+  const bundles = digest.bundles || [];
   els.digestCount.textContent = `${digest.showing_items} of ${digest.total_items}`;
-  if (!digest.items.length) {
-    renderEmpty(els.digest, "No digest items are shown.");
+  if (!bundles.length) {
+    renderEmpty(els.digest, "No machine summaries are shown.");
     return;
   }
-  els.digest.replaceChildren(
-    ...digest.items.map((item) =>
-      messageCard(item, {
-        badge: item.machine_type || item.category,
-        showSnippet: true,
-        mailbox: "all-mail",
-      })
-    )
+  els.digest.replaceChildren(...bundles.map(machineBundleCard));
+}
+
+function machineBundleCard(bundle) {
+  const gotIt = div("button", { type: "button", class: "bundle-got-it" }, "Got it");
+  gotIt.addEventListener("click", () => clearMachineBundle(bundle, gotIt));
+
+  return div("article", { class: "machine-bundle" }, [
+    div("div", { class: "bundle-header" }, [
+      div("div", {}, [
+        div("h3", {}, bundle.title),
+        div("p", { class: "meta" }, `${bundle.count} message(s)`),
+      ]),
+      gotIt,
+    ]),
+    div(
+      "ul",
+      { class: "headline-list" },
+      bundle.sender_groups.map((group) =>
+        div("li", {}, [
+          div("div", { class: "digest-row-heading" }, [
+            div("div", {}, [
+              div("strong", {}, group.sender_name || group.sender),
+              group.followup_count
+                ? div(
+                    "div",
+                    { class: "followup-identity" },
+                    `${group.followup_count} follow-up needed`
+                  )
+                : "",
+            ]),
+            div("div", { class: "digest-row-actions" }, [
+              pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
+              followupButton(group),
+            ]),
+          ]),
+          group.subject ? div("p", { class: "digest-subject" }, group.subject) : "",
+          group.sender_email ? div("p", { class: "meta" }, group.sender_email) : "",
+          group.summary ? div("p", { class: "meta" }, group.summary) : "",
+        ])
+      )
+    ),
+  ]);
+}
+
+function followupButton(group) {
+  const isFollowup = group.followup_count === group.count;
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: `followup-toggle${group.followup_count ? " active" : ""}`,
+      title: isFollowup
+        ? "Remove follow-up from these digest messages."
+        : "Keep these digest messages out of Got it cleanup.",
+    },
+    isFollowup ? "Remove follow-up" : "Follow up"
   );
+  button.addEventListener("click", () =>
+    setDigestFollowup(group.message_ids, !isFollowup, button)
+  );
+  return button;
+}
+
+async function setDigestFollowup(messageIds, followup, button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = followup ? "Marking" : "Removing";
+  try {
+    const response = await fetch("/api/followup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        followup,
+        reason: "User marked this digest row for follow-up.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderPreviewError(payload.error || "Unable to update follow-up.");
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderPreviewError(error.message || "Unable to update follow-up.");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+async function clearMachineBundle(bundle, button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Clearing";
+  try {
+    const response = await fetch("/api/machine-bundle/got-it", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        machine_type: bundle.machine_type,
+        mailbox: state.mailbox,
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderPreviewError(payload.error || "Unable to clear machine bundle.");
+      return;
+    }
+    renderLocalMutationResult(payload);
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderPreviewError(error.message || "Unable to clear machine bundle.");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
 }
 
 function renderActions(actions) {
@@ -235,7 +448,16 @@ function renderActions(actions) {
     renderEmpty(els.actions, "No classified messages are ready for action preview.");
     return;
   }
-  els.actions.replaceChildren(...actions.plans.map(actionItem));
+  const cards = actions.plans.map(actionItem);
+  if (actions.showing_plans < actions.total_plans) {
+    cards.push(
+      showAllItems(
+        `Showing ${actions.showing_plans} of ${actions.total_plans} action preview messages.`,
+        actions.total_plans
+      )
+    );
+  }
+  els.actions.replaceChildren(...cards);
 }
 
 function renderTrash(trash) {
@@ -264,30 +486,149 @@ function renderTrash(trash) {
 function actionItem(plan) {
   return messageCard(plan, {
     badge: plan.action,
+    showReason: true,
     showSnippet: false,
+    prominentSender: true,
     mailbox: state.mailbox,
   });
 }
 
 function messageCard(item, options) {
+  const explanation = [item.reason, metaLine(item)].filter(Boolean).join(" ");
+  const sender = personIdentity(item.sender);
   return div("article", { class: "item" }, [
     div("div", { class: "item-header" }, [
       div("div", {}, [
+        options.prominentSender ? prominentSender(sender) : "",
         subjectButton(item, options.mailbox || state.mailbox),
-        div("div", { class: "meta" }, item.sender),
+        options.showSender === false || options.prominentSender
+          ? ""
+          : div("div", { class: "meta" }, item.sender),
       ]),
-      pill(options.badge),
+      pill(options.badge, explanation),
     ]),
-    div("p", { class: "reason" }, item.reason),
-    div("p", { class: "meta" }, metaLine(item)),
+    options.showReason ? div("p", { class: "reason" }, item.reason) : "",
     options.showSnippet && item.snippet
       ? div("p", { class: "snippet" }, item.snippet)
       : "",
+    options.reviewControls ? inlineReviewControls(item) : "",
     div("div", { class: "item-actions" }, [
+      options.completeConversation ? completeConversationButton(item) : "",
       detailButton(item, options.mailbox || state.mailbox),
       link(item.gmail_url, "Open in Gmail", "secondary-link"),
     ]),
   ]);
+}
+
+function personIdentity(sender) {
+  const nameMatch = sender.match(/^"?([^"<]+?)"?\s*</);
+  const emailMatch = sender.match(/<([^>]+)>/) || sender.match(/([^\s<>]+@[^\s<>]+)/);
+  const email = emailMatch ? emailMatch[1] : "";
+  const name = (nameMatch ? nameMatch[1] : "").trim() || email || sender;
+  return { name, email };
+}
+
+function prominentSender(sender) {
+  return div("div", { class: "review-sender" }, [
+    div("div", { class: "review-sender-name" }, sender.name),
+    sender.email && sender.email !== sender.name
+      ? div("div", { class: "review-sender-email" }, sender.email)
+      : "",
+  ]);
+}
+
+function completeConversationButton(item) {
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: "complete-conversation",
+      title: "Archive this Gmail conversation and remove it from Real People.",
+    },
+    "Complete"
+  );
+  button.addEventListener("click", () => completeConversation(item, button));
+  return button;
+}
+
+async function completeConversation(item, button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Completing";
+  try {
+    const response = await fetch("/api/conversation-complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        thread_id: item.thread_id,
+        mailbox: state.mailbox,
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderPreviewError(payload.error || "Unable to complete conversation.");
+      return;
+    }
+    renderLocalMutationResult(payload);
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderPreviewError(error.message || "Unable to complete conversation.");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
+}
+
+function inlineReviewControls(item) {
+  return div("div", { class: "inline-review-controls" }, [
+    inlineReviewButton(
+      item,
+      "human",
+      "Real People",
+      null,
+      "Move to the Real People tab."
+    ),
+    ...reviewMachineTypes.map(([type, label]) =>
+      inlineReviewButton(
+        item,
+        "machine",
+        label,
+        type,
+        `Move to the ${label} digest.`
+      )
+    ),
+  ]);
+}
+
+function inlineReviewButton(item, resolution, label, machineType, title) {
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: `inline-review-action ${machineType || resolution}`,
+      title,
+    },
+    label
+  );
+  button.addEventListener("click", () =>
+    saveReviewResolution({
+      messageId: item.message_id,
+      resolution,
+      machineType,
+      reason: "User resolved this from the Review card.",
+      button,
+      renderDetail: false,
+      showResult: false,
+    })
+  );
+  return button;
+}
+
+function machineTypeLabel(type) {
+  return type.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function subjectButton(item, mailbox) {
@@ -337,6 +678,7 @@ function renderMessageDetail(payload) {
     ]),
     detailSection("Classification", classificationLines(payload)),
     detailSection("Suggested action", actionLines(payload)),
+    reviewResolutionSection(payload),
     detailSection(
       message.has_body_text ? "Stored body text" : "Snippet",
       [message.has_body_text ? message.body_text : message.snippet || "(no local text)"],
@@ -412,6 +754,105 @@ function actionLines(payload) {
     `Gmail mutation: ${payload.suggested_action.mutates_gmail ? "yes" : "no"}`,
     `Reason: ${payload.suggested_action.reason}`,
   ];
+}
+
+function reviewResolutionSection(payload) {
+  const resolution = payload.review_resolution;
+  if (!resolution || !resolution.available) {
+    return "";
+  }
+
+  const reason = div("input", {
+    type: "text",
+    class: "resolution-reason",
+    "aria-label": "Review resolution reason",
+    placeholder: "Optional reason",
+  });
+
+  return div("section", { class: "detail-section review-resolution" }, [
+    div("h3", {}, "Resolve review"),
+    div("div", { class: "resolution-controls" }, [
+      reason,
+      ...resolution.resolutions.map((option) =>
+        reviewResolutionButton(payload.message.message_id, option, null, reason)
+      ),
+      ...resolution.machine_types.map((type) =>
+        reviewResolutionButton(
+          payload.message.message_id,
+          {
+            id: "machine",
+            label: machineTypeLabel(type),
+            description: `Move to the ${machineTypeLabel(type)} digest.`,
+            requires_machine_type: true,
+          },
+          type,
+          reason
+        )
+      ),
+    ]),
+  ]);
+}
+
+function reviewResolutionButton(messageId, option, machineType, reason) {
+  const button = div("button", { type: "button", class: "resolve-review" }, option.label);
+  button.title = option.description;
+  button.addEventListener("click", () =>
+    saveReviewResolution({
+      messageId,
+      resolution: option.id,
+      machineType: option.requires_machine_type ? machineType : null,
+      reason: reason.value,
+      button,
+    })
+  );
+  return button;
+}
+
+async function saveReviewResolution({
+  messageId,
+  resolution,
+  machineType,
+  reason,
+  button,
+  renderDetail = true,
+  showResult = true,
+}) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Saving";
+  try {
+    const response = await fetch("/api/review-resolution", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_id: messageId,
+        mailbox: state.mailbox,
+        resolution,
+        machine_type: machineType,
+        reason,
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderPreviewError(payload.error || "Unable to save review resolution.");
+      return;
+    }
+    if (renderDetail) {
+      renderMessageDetail(payload.detail);
+    }
+    if (showResult) {
+      renderLocalMutationResult(payload);
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderPreviewError(error.message || "Unable to save review resolution.");
+  } finally {
+    button.disabled = false;
+    button.textContent = previousText;
+  }
 }
 
 function auditSection(events) {
@@ -594,6 +1035,20 @@ function renderLocalActionResult(payload) {
   els.previewPanel.scrollIntoView({ block: "start" });
 }
 
+function renderLocalMutationResult(payload) {
+  const gmailLine = payload.mutates_gmail
+    ? payload.gmail_refresh_hint || "Gmail was modified."
+    : "Gmail was not modified.";
+  els.previewTitle.textContent = payload.title;
+  els.previewReport.textContent = [
+    payload.message,
+    "",
+    gmailLine,
+  ].join("\n");
+  els.previewPanel.hidden = false;
+  els.previewPanel.scrollIntoView({ block: "start" });
+}
+
 function renderPreviewError(message) {
   els.previewTitle.textContent = "Preview error";
   els.previewReport.textContent = message;
@@ -602,15 +1057,21 @@ function renderPreviewError(message) {
 }
 
 function renderError(message) {
-  els.status.replaceChildren(div("p", { class: "empty" }, message));
+  els.profilePopover.hidden = false;
+  els.profileAvatar.setAttribute("aria-expanded", "true");
+  els.profilePopover.replaceChildren(profileLine("Status", message));
 }
 
 function renderEmpty(target, message) {
   target.replaceChildren(div("p", { class: "empty" }, message));
 }
 
-function pill(text) {
-  return div("span", { class: `pill ${text}` }, text.replaceAll("_", " "));
+function pill(text, title = "") {
+  const attrs = { class: `pill ${text}` };
+  if (title) {
+    attrs.title = title;
+  }
+  return div("span", attrs, text.replaceAll("_", " "));
 }
 
 function link(href, text, className = "") {

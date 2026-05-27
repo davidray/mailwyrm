@@ -30,6 +30,21 @@ class DigestItem:
     classification: ClassificationRecord
 
 
+@dataclass(frozen=True)
+class DigestBundle:
+    machine_type: str
+    title: str
+    items: list[DigestItem]
+
+    @property
+    def count(self) -> int:
+        return len(self.items)
+
+    @property
+    def message_ids(self) -> list[str]:
+        return [item.message.id for item in self.items]
+
+
 def render_digest(
     state: MailwyrmState,
     *,
@@ -94,6 +109,32 @@ def build_digest_items(
     if limit is not None:
         items = items[:limit]
     return items
+
+
+def build_digest_bundles(
+    state: MailwyrmState,
+    *,
+    limit: int | None = None,
+) -> list[DigestBundle]:
+    items = build_digest_items(state, limit=limit)
+    grouped: dict[str, list[DigestItem]] = defaultdict(list)
+    for item in items:
+        if item.classification.category != "machine":
+            continue
+        grouped[_section_for(item.classification)].append(item)
+
+    bundles: list[DigestBundle] = []
+    for section in DIGEST_SECTION_ORDER:
+        section_items = grouped.get(section, [])
+        if section_items:
+            bundles.append(
+                DigestBundle(
+                    machine_type=section,
+                    title=_section_title(section),
+                    items=section_items,
+                )
+            )
+    return bundles
 
 
 def mark_digest_items(
@@ -163,7 +204,7 @@ def _section_title(section: str) -> str:
         "transactional": "Transactional",
         "news": "News",
         "spam": "Spam",
-        "product_community": "Product Community",
+        "product_community": "Community",
         # Legacy section names from earlier local state.
         "delivery": "Deliveries",
         "newsletter": "Newsletters",

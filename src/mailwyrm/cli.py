@@ -21,7 +21,12 @@ from mailwyrm.actions import (
     restore_trashed_message,
 )
 from mailwyrm.classifier import classify_message
-from mailwyrm.config import client_secret_path, state_path, token_path
+from mailwyrm.config import (
+    client_secret_path,
+    show_metrics_enabled,
+    state_path,
+    token_path,
+)
 from mailwyrm.corrections import CorrectionError, add_correction, correction_report
 from mailwyrm.corrections import effective_classification
 from mailwyrm.daily import render_daily_cockpit, render_daily_preview, render_daily_status
@@ -104,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
             args.limit,
             args.audit_limit,
             args.client_secret,
+            args.show_metrics,
         )
 
     parser.print_help()
@@ -589,6 +595,15 @@ def build_parser() -> argparse.ArgumentParser:
             "commands. Defaults to MAILWYRM_CLIENT_SECRET when set."
         ),
     )
+    app_parser.add_argument(
+        "--show-metrics",
+        action="store_true",
+        default=None,
+        help=(
+            "Show summary metric cards. Defaults to MAILWYRM_SHOW_METRICS, "
+            "and is off when unset."
+        ),
+    )
 
     return parser
 
@@ -884,6 +899,7 @@ def app_command(
     limit: int,
     audit_limit: int,
     client_secret: Path | None = None,
+    show_metrics: bool | None = None,
 ) -> int:
     client_secret = client_secret or client_secret_path()
     run_app_server(
@@ -893,6 +909,7 @@ def app_command(
         limit=limit,
         audit_limit=audit_limit,
         client_secret=client_secret,
+        show_metrics=show_metrics_enabled() if show_metrics is None else show_metrics,
     )
     return 0
 
@@ -978,6 +995,11 @@ def daily_apply_command(client_secret: Path, limit: int | None, mailbox: str) ->
         print(
             f"Skipped {archive_result.skipped_not_digested} archive candidate(s) "
             "because they have not appeared in a digest yet."
+        )
+    if archive_result.skipped_followup:
+        print(
+            f"Skipped {archive_result.skipped_followup} archive candidate(s) "
+            "because they are marked for follow-up."
         )
     print("Trash actions were not applied.")
     return 0
@@ -1169,6 +1191,11 @@ def actions_apply_archive_command(
             f"Skipped {result.skipped_not_digested} archive candidate(s) "
             "because they have not appeared in a digest yet."
         )
+    if result.skipped_followup:
+        print(
+            f"Skipped {result.skipped_followup} archive candidate(s) "
+            "because they are marked for follow-up."
+        )
     return 0
 
 
@@ -1224,6 +1251,11 @@ def actions_apply_trash_command(
         print(
             f"Skipped {result.skipped_already_trashed} trash candidate(s) "
             "because they are already in Gmail Trash."
+        )
+    if result.skipped_followup:
+        print(
+            f"Skipped {result.skipped_followup} trash candidate(s) "
+            "because they are marked for follow-up."
         )
     return 0
 

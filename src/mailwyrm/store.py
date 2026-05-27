@@ -11,6 +11,7 @@ from mailwyrm.models import (
     ClassificationCorrection,
     ClassificationRecord,
     DigestAuditEvent,
+    FollowUpMarker,
     GmailToken,
     LabelAuditEvent,
     MessageRecord,
@@ -25,6 +26,7 @@ class MailwyrmState:
     messages: dict[str, MessageRecord] = field(default_factory=dict)
     classifications: dict[str, ClassificationRecord] = field(default_factory=dict)
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
+    followups: dict[str, FollowUpMarker] = field(default_factory=dict)
     digest_audit_events: list[DigestAuditEvent] = field(default_factory=list)
     label_audit_events: list[LabelAuditEvent] = field(default_factory=list)
     automation_policy: AutomationPolicy = field(default_factory=AutomationPolicy)
@@ -42,6 +44,10 @@ class MailwyrmState:
         corrections = {
             message_id: ClassificationCorrection.from_dict(correction)
             for message_id, correction in data.get("corrections", {}).items()
+        }
+        followups = {
+            message_id: FollowUpMarker.from_dict(marker)
+            for message_id, marker in data.get("followups", {}).items()
         }
         label_audit_events = [
             LabelAuditEvent.from_dict(event)
@@ -61,6 +67,7 @@ class MailwyrmState:
             messages=messages,
             classifications=classifications,
             corrections=corrections,
+            followups=followups,
             digest_audit_events=digest_audit_events,
             label_audit_events=label_audit_events,
             automation_policy=automation_policy,
@@ -82,6 +89,10 @@ class MailwyrmState:
             "corrections": {
                 message_id: correction.to_dict()
                 for message_id, correction in sorted(self.corrections.items())
+            },
+            "followups": {
+                message_id: marker.to_dict()
+                for message_id, marker in sorted(self.followups.items())
             },
             "digest_audit_events": [
                 event.to_dict() for event in self.digest_audit_events
