@@ -174,7 +174,7 @@ class CockpitTest(unittest.TestCase):
         self.assertTrue(
             payload["digest"]["bundles"][0]["action_label"].startswith("Got it: trash")
         )
-        self.assertIn("headlines", payload["digest"]["bundles"][0])
+        self.assertIn("sender_groups", payload["digest"]["bundles"][0])
         self.assertEqual(payload["mailbox_actions"]["mailbox"], "inbox")
         self.assertEqual(len(payload["mailbox_actions"]["plans"]), 1)
         self.assertIn(
@@ -264,9 +264,46 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["attention"]["machine"], 1)
         self.assertEqual(payload["digest"]["bundles"][0]["title"], "News")
         self.assertEqual(
-            payload["digest"]["bundles"][0]["headlines"][0]["subject"],
-            "Morning headlines",
+            payload["digest"]["bundles"][0]["sender_groups"][0]["summary"],
+            "A useful local snippet.",
         )
+
+    def test_digest_bundle_payload_groups_same_sender_rows(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Copilot finished one"),
+                "msg-2": message("msg-2", "Copilot finished two"),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-msg-3",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Another sender.",
+                    headers={
+                        "From": "GitHub <notifications@github.com>",
+                        "Subject": "Issue update",
+                    },
+                ),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="machine", machine_type="news"),
+                "msg-2": classification("msg-2", category="machine", machine_type="news"),
+                "msg-3": classification("msg-3", category="machine", machine_type="news"),
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        groups = payload["digest"]["bundles"][0]["sender_groups"]
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0]["sender_email"], "sender@example.com")
+        self.assertEqual(groups[0]["count"], 2)
+        self.assertEqual(
+            groups[0]["summary"],
+            "2 messages: Copilot finished one; Copilot finished two",
+        )
+        self.assertEqual(groups[1]["sender_email"], "notifications@github.com")
 
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(

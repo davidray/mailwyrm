@@ -609,15 +609,51 @@ def _digest_bundle_payload(bundle, *, mailbox: str) -> dict[str, Any]:
         "mailbox": mailbox,
         "action": "trash",
         "action_label": f"Got it: trash {bundle.title.lower()}",
-        "headlines": [
-            {
-                "subject": _header(item.message, "Subject", "(no subject)"),
-                "sender": _header(item.message, "From", "(unknown sender)"),
-                "summary": _clean_snippet(item.message.body_text or item.message.snippet),
-            }
-            for item in bundle.items
-        ],
+        "sender_groups": _digest_sender_groups(bundle.items),
     }
+
+
+def _digest_sender_groups(items) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        sender = _header(item.message, "From", "(unknown sender)")
+        sender_name, sender_email = _person_from_sender(sender)
+        key = sender_email.lower() if sender_email else sender_name.lower()
+        group = groups.setdefault(
+            key,
+            {
+                "sender": sender,
+                "sender_name": sender_name,
+                "sender_email": sender_email,
+                "count": 0,
+                "subjects": [],
+                "summaries": [],
+                "gmail_url": _gmail_url(item.message.id),
+                "order": len(groups),
+            },
+        )
+        group["count"] += 1
+        group["subjects"].append(_header(item.message, "Subject", "(no subject)"))
+        summary = _clean_snippet(item.message.body_text or item.message.snippet)
+        if summary:
+            group["summaries"].append(summary)
+
+    sender_groups = sorted(groups.values(), key=lambda group: group["order"])
+    for group in sender_groups:
+        del group["order"]
+        group["summary"] = _digest_sender_summary(group)
+        del group["summaries"]
+    return sender_groups
+
+
+def _digest_sender_summary(group: dict[str, Any]) -> str:
+    subjects = group["subjects"]
+    if group["count"] == 1:
+        return group["summaries"][0] if group["summaries"] else subjects[0]
+    shown_subjects = "; ".join(subjects[:3])
+    hidden = group["count"] - 3
+    suffix = f"; +{hidden} more" if hidden > 0 else ""
+    return f"{group['count']} messages: {shown_subjects}{suffix}"
 
 
 def _lane_item_payload(

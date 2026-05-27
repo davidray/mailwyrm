@@ -64,8 +64,8 @@ correspondence, or a durable policy.
 The digest should be structured rather than a flat list of emails. The user
 should see one section per machine-mail category, such as news, marketing,
 transactional, spam, and product community. Each section should summarize what
-arrived in that category, for example by listing headlines for news mail,
-without making the user inspect every original email.
+arrived in that category, grouped by sender when the same sender produced
+multiple messages, without making the user inspect every original email.
 
 Useful categories include:
 

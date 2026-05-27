@@ -364,10 +364,14 @@ function machineBundleCard(bundle) {
     div(
       "ul",
       { class: "headline-list" },
-      bundle.headlines.map((headline) =>
+      bundle.sender_groups.map((group) =>
         div("li", {}, [
-          div("strong", {}, headline.subject),
-          headline.summary ? div("p", { class: "meta" }, headline.summary) : "",
+          div("div", { class: "digest-row-heading" }, [
+            div("strong", {}, group.sender_name || group.sender),
+            pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
+          ]),
+          group.sender_email ? div("p", { class: "meta" }, group.sender_email) : "",
+          group.summary ? div("p", { class: "meta" }, group.summary) : "",
         ])
       )
     ),

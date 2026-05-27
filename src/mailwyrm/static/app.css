@@ -476,6 +476,13 @@ button {
   overflow-wrap: anywhere;
 }
 
+.digest-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .item-header {
   display: flex;
   justify-content: space-between;

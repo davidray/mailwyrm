@@ -63,7 +63,7 @@ It shows:
 - Inline review controls on Review cards so sender-and-subject triage can
   classify mail without opening message details.
 - Archive and trash policy state.
-- Machine digest bundles grouped by category, with headline-style summaries
+- Machine digest bundles grouped by category, with sender-level summary rows
   instead of individual email cards.
 - A category-level "Got it" button that records the bundle as digested and
   moves the whole bundle to Gmail Trash.
