@@ -35,11 +35,12 @@ from mailwyrm.corrections import (
 from mailwyrm.daily import render_daily_preview
 from mailwyrm.digest import build_digest_bundles, mark_digest_items
 from mailwyrm.followups import set_followup
-from mailwyrm.gmail import GmailClient
+from mailwyrm.gmail import GmailApiError, GmailClient
 from mailwyrm.labels import build_label_plans, render_label_preview
 from mailwyrm.models import GMAIL_MODIFY_SCOPE
 from mailwyrm.oauth import refresh_token, token_is_expired
 from mailwyrm.store import MailwyrmState, read_state, read_token, write_state, write_token
+from mailwyrm.sync import render_sync_summary, sync_mailbox_from_gmail
 
 
 DEFAULT_APP_HOST = "127.0.0.1"
@@ -130,6 +131,9 @@ def _handler(
             if parsed_url.path == "/api/local-classify":
                 self._send_local_classify(parsed_url.query)
                 return
+            if parsed_url.path == "/api/gmail-sync":
+                self._send_gmail_sync(parsed_url.query)
+                return
             if parsed_url.path == "/api/review-resolution":
                 self._send_review_resolution()
                 return
@@ -201,6 +205,42 @@ def _handler(
                 limit=request_limit,
                 mailbox=request_mailbox,
             )
+            write_state(state_file, state)
+            self._send_json(payload)
+
+        def _send_gmail_sync(self, query: str) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            params = parse_qs(query)
+            try:
+                request_limit = _query_int(params, "limit", limit)
+                request_mailbox = _query_mailbox(params, mailbox)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_read_client(client_secret)
+                payload = sync_gmail_messages(
+                    client,
+                    state,
+                    limit=request_limit,
+                    mailbox=request_mailbox,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+
             write_state(state_file, state)
             self._send_json(payload)
 
@@ -721,6 +761,44 @@ def classify_local_messages(
     }
 
 
+def sync_gmail_messages(
+    client,
+    state: MailwyrmState,
+    *,
+    limit: int,
+    mailbox: str,
+) -> dict[str, object]:
+    stats = sync_mailbox_from_gmail(
+        client,
+        state,
+        limit=limit,
+        mailbox=mailbox,
+        include_body=True,
+    )
+    return {
+        "title": "Gmail Sync",
+        "mailbox": mailbox,
+        "limit": limit,
+        "mutated_local_state": True,
+        "mutates_gmail": False,
+        "matched_messages": stats.fetched,
+        "message": render_sync_summary(
+            stats,
+            mailbox,
+            state.account_email,
+        ),
+        "report_lines": [
+            f"Fetched: {stats.fetched}",
+            f"New: {stats.new}",
+            f"Updated: {stats.updated}",
+            f"Unchanged: {stats.unchanged}",
+            f"Label changes: {stats.label_changes}",
+            "Stored bounded body text for classification and summaries.",
+            "Gmail was not modified.",
+        ],
+    }
+
+
 def _needs_review_type_refresh(classification) -> bool:
     return classification.category == "needs_review" and classification.review_type is None
 
@@ -771,6 +849,20 @@ def _gmail_modify_client(client_secret: Path) -> GmailClient:
             "Run `mailwyrm auth --scope modify` first."
         )
     if token_is_expired(token):
+        token = refresh_token(client_secret, token)
+        write_token(token_path(), token)
+    return GmailClient(token)
+
+
+def _gmail_read_client(client_secret: Path | None) -> GmailClient:
+    token = read_token(token_path())
+    if token is None:
+        raise ValueError("No Gmail token found. Run `mailwyrm auth` first.")
+    if token_is_expired(token):
+        if client_secret is None:
+            raise ValueError(
+                "client secret is required to refresh the stored Gmail token"
+            )
         token = refresh_token(client_secret, token)
         write_token(token_path(), token)
     return GmailClient(token)

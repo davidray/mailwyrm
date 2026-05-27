@@ -6,7 +6,10 @@ const state = {
 };
 
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
-const localActionWorkflows = new Set(["classify"]);
+const appActionEndpoints = {
+  sync: "/api/gmail-sync",
+  classify: "/api/local-classify",
+};
 const reviewMachineTypes = [
   ["marketing", "Marketing"],
   ["transactional", "Transactional"],
@@ -925,8 +928,8 @@ function renderWorkflows(workflows) {
 function workflowCard(workflow) {
   const countText = workflow.count === null ? "" : `${workflow.count} candidates`;
   const controls = [];
-  if (localActionWorkflows.has(workflow.id)) {
-    controls.push(localActionButton(workflow));
+  if (workflow.app_action && appActionEndpoints[workflow.app_action]) {
+    controls.push(appActionButton(workflow));
   }
   if (previewableWorkflows.has(workflow.id)) {
     controls.push(previewButton(workflow));
@@ -946,22 +949,27 @@ function workflowCard(workflow) {
   ]);
 }
 
-function localActionButton(workflow) {
-  const button = div("button", { type: "button", class: "run-local-action" }, "Run classify");
-  button.addEventListener("click", () => runLocalAction(workflow.id, button));
+function appActionButton(workflow) {
+  const button = div(
+    "button",
+    { type: "button", class: "run-local-action" },
+    workflow.action_label || "Run"
+  );
+  button.addEventListener("click", () => runAppAction(workflow, button));
   return button;
 }
 
-async function runLocalAction(workflowId, button) {
+async function runAppAction(workflow, button) {
   const params = new URLSearchParams({
     mailbox: state.mailbox,
     limit: String(state.limit),
   });
+  const endpoint = appActionEndpoints[workflow.app_action];
   const previousText = button.textContent;
   button.disabled = true;
   button.textContent = "Running";
   try {
-    const response = await fetch(`/api/local-classify?${params}`, {
+    const response = await fetch(`${endpoint}?${params}`, {
       method: "POST",
       headers: {
         "X-Mailwyrm-App": "local-ui",
@@ -972,7 +980,7 @@ async function runLocalAction(workflowId, button) {
       renderPreviewError(payload.error || "Unable to run local action.");
       return;
     }
-    renderLocalActionResult(payload);
+    renderAppActionResult(payload);
     await loadCockpit();
   } catch (error) {
     renderPreviewError(error.message || "Unable to run local action.");
@@ -1020,9 +1028,18 @@ function renderWorkflowPreview(payload) {
   els.previewPanel.scrollIntoView({ block: "start" });
 }
 
-function renderLocalActionResult(payload) {
+function renderAppActionResult(payload) {
   els.previewTitle.textContent = payload.title;
-  els.previewReport.textContent = [
+  els.previewReport.textContent = actionReportLines(payload).join("\n");
+  els.previewPanel.hidden = false;
+  els.previewPanel.scrollIntoView({ block: "start" });
+}
+
+function actionReportLines(payload) {
+  if (payload.report_lines && payload.report_lines.length) {
+    return [payload.message, "", ...payload.report_lines];
+  }
+  return [
     payload.message,
     "",
     `Mailbox: ${payload.mailbox}`,
@@ -1030,9 +1047,7 @@ function renderLocalActionResult(payload) {
     `Classified locally: ${payload.classified_messages}`,
     `Already classified: ${payload.skipped_already_classified}`,
     "Gmail was not modified.",
-  ].join("\n");
-  els.previewPanel.hidden = false;
-  els.previewPanel.scrollIntoView({ block: "start" });
+  ];
 }
 
 function renderLocalMutationResult(payload) {

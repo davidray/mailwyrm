@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import copy
 import sys
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -53,16 +52,16 @@ from mailwyrm.oauth import (
 )
 from mailwyrm.policy import enable_trash_after_digest, render_policy_status
 from mailwyrm.store import read_state, read_token, write_state, write_token
-from mailwyrm.sync import SyncStats, refresh_message_from_gmail, render_sync_summary
+from mailwyrm.sync import render_sync_summary, sync_mailbox_from_gmail
 from mailwyrm.sync import (
     HistoryReconcileStats,
+    SYNC_MAILBOXES,
+    include_spam_trash_for_mailbox,
+    label_ids_for_mailbox,
     merge_history_stats,
     reconcile_history,
     render_history_reconcile_summary,
 )
-
-
-SYNC_MAILBOXES = ("inbox", "all-mail", "trash")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -643,32 +642,15 @@ def sync_command(
         write_token(token_path(), token)
 
     client = GmailClient(token)
-    profile = client.profile()
     state = read_state(state_path())
-    state.account_email = profile.get("emailAddress")
-    state.history_id = profile.get("historyId")
-    state.last_sync_mailbox = mailbox
-
-    message_refs = client.list_messages(
-        max_results=limit,
-        label_ids=label_ids_for_mailbox(mailbox),
-        include_spam_trash=include_spam_trash_for_mailbox(mailbox),
+    stats = sync_mailbox_from_gmail(
+        client,
+        state,
+        limit=limit,
+        mailbox=mailbox,
+        include_body=include_body,
+        body_char_limit=body_char_limit,
     )
-    stats = SyncStats()
-    for message_ref in message_refs:
-        if include_body:
-            message = client.get_message_full(str(message_ref["id"]))
-            record = MessageRecord.from_gmail_message(
-                message,
-                body_char_limit=body_char_limit,
-            )
-        else:
-            message = client.get_message_metadata(str(message_ref["id"]))
-            record = MessageRecord.from_gmail_message(message)
-            previous = state.messages.get(record.id)
-            if previous is not None and previous.body_text:
-                record = replace(record, body_text=previous.body_text)
-        stats = refresh_message_from_gmail(state, record, stats)
 
     write_state(state_path(), state)
     print(render_sync_summary(stats, mailbox, state.account_email))
@@ -721,18 +703,6 @@ def sync_history_command(client_secret: Path, max_pages: int) -> int:
         )
     print(f"Local index: {state_path()}")
     return 0
-
-
-def label_ids_for_mailbox(mailbox: str) -> tuple[str, ...] | None:
-    if mailbox == "all-mail":
-        return None
-    if mailbox == "trash":
-        return ("TRASH",)
-    return ("INBOX",)
-
-
-def include_spam_trash_for_mailbox(mailbox: str) -> bool:
-    return mailbox == "trash"
 
 
 def ensure_labels_command(client_secret: Path) -> int:

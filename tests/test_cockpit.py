@@ -224,11 +224,15 @@ class CockpitTest(unittest.TestCase):
             "--mailbox inbox --limit 1",
             payload["workflows"][0]["primary_command"],
         )
+        self.assertEqual(payload["workflows"][0]["app_action"], "sync")
+        self.assertEqual(payload["workflows"][0]["action_label"], "Sync Gmail")
         self.assertEqual(payload["workflows"][-1]["status"], "Policy enabled")
         self.assertEqual(payload["workflows"][-1]["count"], 1)
         self.assertTrue(payload["workflows"][-1]["mutates_gmail"])
         classify_workflow = payload["workflows"][1]
         self.assertEqual(classify_workflow["count"], 1)
+        self.assertEqual(classify_workflow["app_action"], "classify")
+        self.assertEqual(classify_workflow["action_label"], "Classify")
         self.assertIn(
             "classify --mailbox inbox --limit 1",
             classify_workflow["primary_command"],

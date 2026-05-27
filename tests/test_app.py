@@ -17,6 +17,7 @@ from mailwyrm.app import (
     build_workflow_preview_payload,
     classify_local_messages,
     create_app_server,
+    sync_gmail_messages,
 )
 from mailwyrm.cli import build_parser
 from mailwyrm.models import (
@@ -75,6 +76,7 @@ class AppTest(unittest.TestCase):
         self.assertNotIn("cleanup-band", static_root.joinpath("index.html").read_text())
         self.assertIn("workflows", static_root.joinpath("index.html").read_text())
         self.assertIn("/api/daily-cockpit", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/gmail-sync", static_root.joinpath("app.js").read_text())
         self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
         self.assertIn("renderProfile", static_root.joinpath("app.js").read_text())
         self.assertIn("profileInitial", static_root.joinpath("app.js").read_text())
@@ -102,6 +104,8 @@ class AppTest(unittest.TestCase):
         self.assertNotIn("command-text", static_root.joinpath("app.js").read_text())
         self.assertNotIn("commands-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("workflow-status", static_root.joinpath("app.js").read_text())
+        self.assertIn("appActionButton", static_root.joinpath("app.js").read_text())
+        self.assertIn("appActionEndpoints", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/workflow-preview", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/message-detail", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/local-classify", static_root.joinpath("app.js").read_text())
@@ -357,6 +361,21 @@ class AppTest(unittest.TestCase):
         self.assertFalse(result["mutated_local_state"])
         self.assertEqual(state.classifications, {})
 
+    def test_sync_gmail_messages_returns_app_action_report(self) -> None:
+        state = MailwyrmState()
+        client = FakeAppSyncClient()
+
+        result = sync_gmail_messages(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Gmail Sync")
+        self.assertEqual(result["mailbox"], "inbox")
+        self.assertEqual(result["matched_messages"], 1)
+        self.assertFalse(result["mutates_gmail"])
+        self.assertIn("Synced 1 inbox message", result["message"])
+        self.assertIn("Gmail was not modified.", result["report_lines"])
+        self.assertEqual(client.full_message_ids, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].body_text, "Body text")
+
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))
         self.assertFalse(_is_app_mutation_request({APP_MUTATION_HEADER: "other"}))
@@ -429,3 +448,30 @@ class AppTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             classify_local_messages(MailwyrmState(), limit=-1)
+
+
+class FakeAppSyncClient:
+    def __init__(self) -> None:
+        self.full_message_ids: list[str] = []
+
+    def profile(self):
+        return {"emailAddress": "user@example.com", "historyId": "42"}
+
+    def list_messages(self, **kwargs):
+        return [{"id": "msg-1"}]
+
+    def get_message_full(self, message_id):
+        self.full_message_ids.append(message_id)
+        return {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "historyId": "10",
+            "internalDate": "1710000000000",
+            "labelIds": ["INBOX"],
+            "snippet": "Snippet",
+            "payload": {
+                "headers": [{"name": "Subject", "value": "Hello"}],
+                "mimeType": "text/plain",
+                "body": {"data": "Qm9keSB0ZXh0"},
+            },
+        }
