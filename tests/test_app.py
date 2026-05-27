@@ -166,6 +166,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("digestMessageControls", static_root.joinpath("app.js").read_text())
         self.assertIn("digest-row-controls", static_root.joinpath("app.css").read_text())
         self.assertIn("digest-message-list", static_root.joinpath("app.css").read_text())
+        self.assertIn("digest-row", static_root.joinpath("app.js").read_text())
+        self.assertIn(".digest-row:nth-child(even)", static_root.joinpath("app.css").read_text())
         self.assertIn("followupButton", static_root.joinpath("app.js").read_text())
         self.assertIn("sender_groups", static_root.joinpath("app.js").read_text())
         self.assertIn("digest-row-heading", static_root.joinpath("app.css").read_text())

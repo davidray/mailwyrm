@@ -383,10 +383,10 @@ function machineBundleCard(bundle) {
       gotIt,
     ]),
     div(
-      "ul",
+      "div",
       { class: "headline-list" },
       bundle.sender_groups.map((group) =>
-        div("li", {}, [
+        div("article", { class: "digest-row" }, [
           div("div", { class: "digest-row-heading" }, [
             div("div", {}, [
               div("strong", {}, group.sender_name || group.sender),

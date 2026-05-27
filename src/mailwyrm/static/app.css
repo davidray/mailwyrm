@@ -536,13 +536,25 @@ button:disabled {
 
 .headline-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
 }
 
-.headline-list li {
+.digest-row {
   min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 10px 12px;
+}
+
+.digest-row:nth-child(odd) {
+  background: #ffffff;
+}
+
+.digest-row:nth-child(even) {
+  border-color: #e2e8f0;
+  background: #f4f7fb;
 }
 
 .headline-list strong {
