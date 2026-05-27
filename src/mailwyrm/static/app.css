@@ -829,6 +829,22 @@ th {
   background: #f3fbf7;
 }
 
+.workflow-feedback.preview {
+  border-color: #c8d6e8;
+  background: #f8fbff;
+}
+
+.workflow-report {
+  max-height: 240px;
+  overflow: auto;
+  margin: 6px 0 0;
+  border-radius: 6px;
+  background: #202a33;
+  color: #f8fafc;
+  padding: 9px 10px;
+  white-space: pre;
+}
+
 code {
   display: block;
   overflow-x: auto;

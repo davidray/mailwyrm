@@ -1020,6 +1020,7 @@ async function runAppAction(workflow, button) {
   const endpoint = appActionEndpoints[workflowAppAction(workflow)];
   const previousText = button.textContent;
   clearWorkflowFeedback(button);
+  els.previewPanel.hidden = true;
   button.disabled = true;
   button.textContent = "Running";
   try {
@@ -1076,18 +1077,32 @@ async function loadWorkflowPreview(workflowId, button) {
     limit: String(state.limit),
   });
   const previousText = button.textContent;
+  clearWorkflowFeedback(button);
   button.disabled = true;
   button.textContent = "Loading";
   try {
     const response = await fetch(`/api/workflow-preview?${params}`);
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to render preview.");
+      renderWorkflowFeedback(button, {
+        title: "Preview failed",
+        lines: [payload.error || "Unable to render preview."],
+        tone: "error",
+      });
       return;
     }
-    renderWorkflowPreview(payload);
+    renderWorkflowFeedback(button, {
+      title: payload.title,
+      lines: ["Preview only. Gmail was not modified."],
+      report: payload.report,
+      tone: "preview",
+    });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to render preview.");
+    renderWorkflowFeedback(button, {
+      title: "Preview failed",
+      lines: [error.message || "Unable to render preview."],
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
@@ -1139,16 +1154,20 @@ function renderWorkflowFeedbackForId(workflowId, options) {
   renderWorkflowFeedback(card, options);
 }
 
-function renderWorkflowFeedback(target, { title, lines, tone }) {
+function renderWorkflowFeedback(target, { title, lines, report, tone }) {
   const card = target.closest ? target.closest(".workflow") : target;
   if (!card) {
     return;
   }
-  card.querySelector(".workflow-feedback")?.remove();
-  const feedback = div("div", { class: `workflow-feedback ${tone}` }, [
+  const content = [
     div("strong", {}, title),
     ...lines.map((line) => div("p", {}, line)),
-  ]);
+  ];
+  if (report) {
+    content.push(div("pre", { class: "workflow-report" }, report));
+  }
+  card.querySelector(".workflow-feedback")?.remove();
+  const feedback = div("div", { class: `workflow-feedback ${tone}` }, content);
   const actions = card.querySelector(".workflow-actions");
   if (actions) {
     actions.insertAdjacentElement("afterend", feedback);
