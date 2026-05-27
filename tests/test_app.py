@@ -5,6 +5,7 @@ from mailwyrm.app import (
     APP_MUTATION_HEADER,
     APP_MUTATION_HEADER_VALUE,
     _is_app_mutation_request,
+    _query_bool,
     _query_int,
     _query_mailbox,
     _query_message_id,
@@ -93,6 +94,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("setRefreshState", static_root.joinpath("app.js").read_text())
         self.assertIn("refresh-success", static_root.joinpath("app.css").read_text())
         self.assertIn("/api/gmail-sync", static_root.joinpath("app.js").read_text())
+        self.assertIn('params.set("all", "true")', static_root.joinpath("app.js").read_text())
         self.assertIn("/api/gmail-labels/apply", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/archive-after-digest", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/trash-after-digest", static_root.joinpath("app.js").read_text())
@@ -213,6 +215,15 @@ class AppTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "inbox, all-mail, trash"):
             create_app_server(mailbox="spam")
+
+    def test_query_bool_accepts_browser_boolean_values(self) -> None:
+        self.assertTrue(_query_bool({"all": ["true"]}, "all"))
+        self.assertTrue(_query_bool({"all": ["1"]}, "all"))
+        self.assertFalse(_query_bool({}, "all"))
+        self.assertFalse(_query_bool({"all": ["false"]}, "all"))
+
+        with self.assertRaises(ValueError):
+            _query_bool({"all": ["maybe"]}, "all")
 
     def test_query_workflow_accepts_preview_workflows(self) -> None:
         self.assertEqual(
@@ -403,15 +414,17 @@ class AppTest(unittest.TestCase):
         state = MailwyrmState()
         client = FakeAppSyncClient()
 
-        result = sync_gmail_messages(client, state, mailbox="inbox", limit=25)
+        result = sync_gmail_messages(client, state, mailbox="inbox", limit=None)
 
         self.assertEqual(result["title"], "Gmail Sync")
         self.assertEqual(result["mailbox"], "inbox")
         self.assertEqual(result["matched_messages"], 1)
         self.assertFalse(result["mutates_gmail"])
         self.assertIn("Synced 1 inbox message", result["message"])
+        self.assertIn("Fetched the full selected mailbox scope.", result["report_lines"])
         self.assertIn("Gmail was not modified.", result["report_lines"])
         self.assertEqual(client.full_message_ids, ["msg-1"])
+        self.assertIsNone(client.list_kwargs["max_results"])
         self.assertEqual(state.messages["msg-1"].body_text, "Body text")
 
     def test_apply_gmail_labels_returns_preview_report_and_audits(self) -> None:
@@ -591,11 +604,13 @@ class AppTest(unittest.TestCase):
 class FakeAppSyncClient:
     def __init__(self) -> None:
         self.full_message_ids: list[str] = []
+        self.list_kwargs = {}
 
     def profile(self):
         return {"emailAddress": "user@example.com", "historyId": "42"}
 
     def list_messages(self, **kwargs):
+        self.list_kwargs = kwargs
         return [{"id": "msg-1"}]
 
     def get_message_full(self, message_id):

@@ -1173,8 +1173,12 @@ async function runAppAction(workflow, button) {
   }
   const params = new URLSearchParams({
     mailbox: state.mailbox,
-    limit: String(state.limit),
   });
+  if (workflow.sync_all) {
+    params.set("all", "true");
+  } else {
+    params.set("limit", String(state.limit));
+  }
   const endpoint = appActionEndpoints[workflowAppAction(workflow)];
   const previousText = button.textContent;
   clearWorkflowFeedback(button);

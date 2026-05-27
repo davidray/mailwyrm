@@ -33,21 +33,39 @@ class GmailClient:
     def list_messages(
         self,
         *,
-        max_results: int = 25,
+        max_results: int | None = 25,
         label_ids: tuple[str, ...] | None = ("INBOX",),
         include_spam_trash: bool = False,
     ) -> list[dict[str, Any]]:
-        query: dict[str, str | int] = {"maxResults": max_results}
-        if include_spam_trash:
-            query["includeSpamTrash"] = "true"
-        url = f"{GMAIL_API_BASE}/users/me/messages?{urllib.parse.urlencode(query)}"
-        if label_ids:
-            label_query = "&".join(
-                f"labelIds={urllib.parse.quote(label)}" for label in label_ids
-            )
-            url = f"{url}&{label_query}"
-        data = self._request(url)
-        return list(data.get("messages", []))
+        if max_results is not None and max_results < 0:
+            raise ValueError("max_results must be non-negative")
+        page_size = 500 if max_results is None else min(max_results, 500)
+        if page_size == 0:
+            return []
+
+        messages: list[dict[str, Any]] = []
+        page_token: str | None = None
+        while True:
+            remaining = None if max_results is None else max_results - len(messages)
+            if remaining is not None and remaining <= 0:
+                return messages
+            request_size = page_size if remaining is None else min(remaining, page_size)
+            query: dict[str, str | int] = {"maxResults": request_size}
+            if include_spam_trash:
+                query["includeSpamTrash"] = "true"
+            if page_token:
+                query["pageToken"] = page_token
+            url = f"{GMAIL_API_BASE}/users/me/messages?{urllib.parse.urlencode(query)}"
+            if label_ids:
+                label_query = "&".join(
+                    f"labelIds={urllib.parse.quote(label)}" for label in label_ids
+                )
+                url = f"{url}&{label_query}"
+            data = self._request(url)
+            messages.extend(data.get("messages", []))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                return messages
 
     def get_message_metadata(
         self,

@@ -232,7 +232,11 @@ def _handler(
 
             params = parse_qs(query)
             try:
-                request_limit = _query_int(params, "limit", limit)
+                request_limit = (
+                    None
+                    if _query_bool(params, "all")
+                    else _query_int(params, "limit", limit)
+                )
                 request_mailbox = _query_mailbox(params, mailbox)
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
@@ -791,6 +795,15 @@ def _query_mailbox(params: dict[str, list[str]], default: str) -> str:
     return value
 
 
+def _query_bool(params: dict[str, list[str]], name: str) -> bool:
+    raw_value = params.get(name, ["false"])[0].strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
 def _query_workflow(params: dict[str, list[str]]) -> str:
     value = params.get("workflow", [""])[0]
     if value not in SUPPORTED_PREVIEW_WORKFLOWS:
@@ -968,7 +981,7 @@ def sync_gmail_messages(
     client,
     state: MailwyrmState,
     *,
-    limit: int,
+    limit: int | None,
     mailbox: str,
 ) -> dict[str, object]:
     stats = sync_mailbox_from_gmail(
@@ -997,6 +1010,11 @@ def sync_gmail_messages(
             f"Unchanged: {stats.unchanged}",
             f"Label changes: {stats.label_changes}",
             "Stored bounded body text for classification and summaries.",
+            (
+                "Fetched the full selected mailbox scope."
+                if limit is None
+                else f"Fetch limit: {limit}"
+            ),
             "Gmail was not modified.",
         ],
     }

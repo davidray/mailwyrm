@@ -366,9 +366,10 @@ def _workflow_controls(
             "status": "Gmail read",
             "count": None,
             "mutates_gmail": False,
-            "description": "Refresh the local index from Gmail for this mailbox scope.",
+            "description": "Refresh the full local index from Gmail for this mailbox scope.",
             "app_action": "sync",
             "action_label": "Sync Gmail",
+            "sync_all": True,
             "primary_command": (
                 "uv run mailwyrm sync"
                 f"{mailbox_arg}{limit_arg}"
