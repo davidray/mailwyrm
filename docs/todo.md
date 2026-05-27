@@ -4,7 +4,8 @@ This is the durable project todo list for work that should outlive any single Co
 
 ## Backend And User Experience
 
-These items remain as the app shell starts turning the CLI cockpit into a visible product surface.
+These items remain as the app shell turns CLI workflows into a visible product
+surface.
 
 1. Gmail history reconciliation.
    - Expand the first `sync-history` command beyond known-message label and

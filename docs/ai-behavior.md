@@ -60,11 +60,11 @@ cleared by "Got it" until the marker is explicitly removed.
 ## Policy Learning
 
 Review actions are learning signals. When the user resolves a message from
-Review into Real People or a machine-mail category, Mailwyrm records a local
+Review into Correspondence or a machine-mail category, Mailwyrm records a local
 classification correction for that message. The corrected classification should
-immediately drive the current cockpit: machine resolutions leave Review and
+immediately drive the current app view: machine resolutions leave Review and
 appear in the selected machine digest category, while human resolutions move
-into Real People.
+into Correspondence.
 
 Spam is a special machine category. Once Gmail mutation support exists for spam
 handling, user-confirmed spam should be reported or moved to Gmail Spam and
@@ -81,9 +81,13 @@ Example policies:
 - Treat product community notifications from known projects as useful background.
 - Never auto-trash mail from specified senders or domains.
 
-## Tone
+## Tone And Explanation
 
-AI explanations should be brief, calm, and operational.
+Tone, voice, and AI interaction philosophy are governed by Bookwyrm Foundation.
+This section only defines Bookwyrm Mail-specific explanation constraints.
+
+AI explanations in Mail should be brief, calm, evidence-oriented, and useful for
+audit or review surfaces.
 
 The system should not pretend to be certain when it is making a probabilistic judgment. Use concise explanations like:
 
