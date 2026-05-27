@@ -38,7 +38,8 @@ The first app shell is intentionally an attention dashboard, not a full mailbox 
 
 It is organized around three first-class tabs:
 
-- Real People: human correspondence that deserves foreground attention.
+- Real People: human correspondence grouped by person so relationships are the
+  primary unit.
 - Daily Digest: machine-mail category summaries with bundle-level cleanup.
 - Review: protected or uncertain mail, action previews, audit, and workflow
   controls.

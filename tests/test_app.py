@@ -69,6 +69,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("/api/daily-cockpit", static_root.joinpath("app.js").read_text())
         self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
         self.assertIn("Real People", static_root.joinpath("app.js").read_text())
+        self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
+        self.assertIn("person-group", static_root.joinpath("app.css").read_text())
         self.assertIn("renderCleanup", static_root.joinpath("app.js").read_text())
         self.assertIn("cleanupHeading", static_root.joinpath("app.js").read_text())
         self.assertIn(".tabs", static_root.joinpath("app.css").read_text())

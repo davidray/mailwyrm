@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.utils import parseaddr
 from shlex import quote
 from datetime import UTC, datetime
 from pathlib import Path
@@ -487,6 +488,7 @@ def _attention_lanes(
             "total_items": 0,
             "showing_items": 0,
             "items": [],
+            "people": [],
         },
         "needs_review": {
             "total_items": 0,
@@ -533,7 +535,41 @@ def _attention_lanes(
                 )
             )
             lane["showing_items"] += 1
+    lanes["human"]["people"] = _people_groups(lanes["human"]["items"])
     return lanes
+
+
+def _people_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        sender_name, sender_email = _person_from_sender(item["sender"])
+        key = sender_email.lower() if sender_email else sender_name.lower()
+        group = groups.setdefault(
+            key,
+            {
+                "name": sender_name,
+                "email": sender_email,
+                "sender": item["sender"],
+                "count": 0,
+                "items": [],
+                "order": len(groups),
+            },
+        )
+        group["count"] += 1
+        group["items"].append(item)
+    people = sorted(groups.values(), key=lambda group: group["order"])
+    for group in people:
+        del group["order"]
+    return people
+
+
+def _person_from_sender(sender: str) -> tuple[str, str]:
+    name, email = parseaddr(sender)
+    if not name and email:
+        name = email
+    if not name:
+        name = sender or "(unknown sender)"
+    return _single_line(name), _single_line(email)
 
 
 def _lane_name(category: str, action: str) -> str | None:

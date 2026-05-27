@@ -117,6 +117,7 @@ function renderCockpit(payload) {
   renderLane(els.humanLane, els.humanCount, payload.lanes.human, {
     empty: "No human correspondence in this mailbox scope.",
     label: "people",
+    groupPeople: true,
   });
   renderLane(els.reviewLane, els.reviewCount, payload.lanes.needs_review, {
     empty: "No protected or uncertain messages in this mailbox scope.",
@@ -217,6 +218,11 @@ function renderMetrics(payload) {
 
 function renderLane(target, counter, lane, options) {
   counter.textContent = `${lane.showing_items} of ${lane.total_items}`;
+  const people = options.groupPeople ? lane.people || [] : [];
+  if (options.groupPeople && people.length) {
+    target.replaceChildren(...people.map((person) => personGroupCard(person, options)));
+    return;
+  }
   if (!lane.items.length) {
     renderEmpty(target, options.empty);
     return;
@@ -234,6 +240,34 @@ function renderLane(target, counter, lane, options) {
       })
     )
   );
+}
+
+function personGroupCard(person, options) {
+  return div("article", { class: "person-group" }, [
+    div("div", { class: "person-header" }, [
+      div("div", {}, [
+        div("h3", {}, person.name),
+        person.email ? div("p", { class: "meta" }, person.email) : "",
+      ]),
+      pill(`${person.count} message${person.count === 1 ? "" : "s"}`),
+    ]),
+    div(
+      "div",
+      { class: "person-messages" },
+      person.items.map((item) =>
+        messageCard(item, {
+          badge:
+            typeof options.badge === "function"
+              ? options.badge(item)
+              : item.action || options.label,
+          showSnippet: true,
+          showReason: options.showReason || false,
+          compact: true,
+          mailbox: state.mailbox,
+        })
+      )
+    ),
+  ]);
 }
 
 function renderDigest(digest) {

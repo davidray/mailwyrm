@@ -241,6 +241,66 @@ class CockpitTest(unittest.TestCase):
             payload["commands"][0],
         )
 
+    def test_real_people_lane_groups_messages_by_sender(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-msg-1",
+                    history_id="10",
+                    internal_date="1710000000002",
+                    label_ids=["INBOX"],
+                    snippet="First note.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "First",
+                    },
+                ),
+                "msg-2": MessageRecord(
+                    id="msg-2",
+                    thread_id="thread-msg-2",
+                    history_id="10",
+                    internal_date="1710000000001",
+                    label_ids=["INBOX"],
+                    snippet="Second note.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "Second",
+                    },
+                ),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-msg-3",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Other note.",
+                    headers={
+                        "From": "Grace Hopper <grace@example.com>",
+                        "Subject": "Other",
+                    },
+                ),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="human", machine_type=None),
+                "msg-2": classification("msg-2", category="human", machine_type=None),
+                "msg-3": classification("msg-3", category="human", machine_type=None),
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        people = payload["lanes"]["human"]["people"]
+        self.assertEqual(len(people), 2)
+        self.assertEqual(people[0]["name"], "Ada Lovelace")
+        self.assertEqual(people[0]["email"], "ada@example.com")
+        self.assertEqual(people[0]["count"], 2)
+        self.assertEqual(
+            [item["subject"] for item in people[0]["items"]],
+            ["First", "Second"],
+        )
+        self.assertEqual(people[1]["name"], "Grace Hopper")
+
     def test_review_type_counts_skip_non_needs_review_items(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", "Low confidence machine")},

@@ -314,6 +314,37 @@ button {
   background: #fbfdff;
 }
 
+.person-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.person-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.person-header h3,
+.person-header p {
+  margin-bottom: 0;
+}
+
+.person-messages {
+  display: grid;
+  gap: 8px;
+}
+
+.person-messages .item {
+  background: var(--panel);
+  box-shadow: none;
+}
+
 .machine-bundle {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -614,6 +645,7 @@ pre {
   .topbar,
   .panel-heading,
   .bundle-header,
+  .person-header,
   .item-header {
     align-items: flex-start;
     flex-direction: column;
