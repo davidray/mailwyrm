@@ -356,7 +356,7 @@ button {
 
 .item-list {
   display: grid;
-  gap: 10px;
+  gap: 18px;
 }
 
 .item {
@@ -368,11 +368,15 @@ button {
 }
 
 .person-group {
-  border: 1px solid var(--line);
-  border-radius: 8px;
   min-width: 0;
-  padding: 14px;
-  background: #fbfdff;
+  border-top: 1px solid var(--line);
+  padding: 20px 0 4px;
+  background: transparent;
+}
+
+.person-group:first-child {
+  border-top: 0;
+  padding-top: 6px;
 }
 
 .person-header {
@@ -428,7 +432,7 @@ button {
 }
 
 .person-messages .item {
-  background: var(--panel);
+  background: #fbfdff;
   box-shadow: none;
 }
 

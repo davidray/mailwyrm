@@ -83,6 +83,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("profile-popover", static_root.joinpath("app.css").read_text())
         self.assertIn("person-avatar", static_root.joinpath("app.css").read_text())
         self.assertIn("person-group", static_root.joinpath("app.css").read_text())
+        self.assertIn(".person-group:first-child", static_root.joinpath("app.css").read_text())
         self.assertIn("renderCleanup", static_root.joinpath("app.js").read_text())
         self.assertIn("cleanupHeading", static_root.joinpath("app.js").read_text())
         self.assertIn(".tabs", static_root.joinpath("app.css").read_text())
