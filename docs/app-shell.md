@@ -45,8 +45,8 @@ The first app shell is intentionally an attention dashboard, not a full mailbox 
 
 It is organized around three first-class tabs and one quieter operational tab:
 
-- Real People: human correspondence grouped by person so relationships are the
-  primary unit.
+- Real People: human correspondence grouped by person and Gmail thread so
+  relationships and conversations are the primary units.
 - Daily Digest: machine-mail category summaries.
 - Review: protected or uncertain mail that needs triage.
 - Tools: lower-prominence operational surfaces for action previews, audit, and
@@ -60,6 +60,8 @@ It shows:
   messages, including review-type buckets for needs-review mail.
 - A "Complete" action for Real People conversations that archives the Gmail
   thread and removes it from Real People until new inbox activity arrives.
+  Multiple indexed messages from the same Gmail thread appear as a single
+  conversation row.
 - Inline review controls on Review cards so sender-and-subject triage can
   classify mail without opening message details.
 - Archive and trash policy state.
@@ -79,7 +81,7 @@ It shows:
 - Preview-first workflow controls for local classification, daily preview,
   label preview, archive preview, and trash preview.
 - In-app read-only preview reports for daily preview, label preview, mailbox
-  action preview, and trash preview.
+  action preview, and trash preview in the Tools tab.
 - In-app local classification and review resolution for indexed messages in
   the selected mailbox scope.
 

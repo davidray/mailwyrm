@@ -568,7 +568,31 @@ def _people_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     people = sorted(groups.values(), key=lambda group: group["order"])
     for group in people:
         del group["order"]
+        group["conversation_count"] = len(
+            {item["thread_id"] for item in group["items"]}
+        )
+        group["items"] = _conversation_groups(group["items"])
     return people
+
+
+def _conversation_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        group = groups.setdefault(
+            item["thread_id"],
+            {
+                **item,
+                "message_count": 0,
+                "message_ids": [],
+                "order": len(groups),
+            },
+        )
+        group["message_count"] += 1
+        group["message_ids"].append(item["message_id"])
+    conversations = sorted(groups.values(), key=lambda group: group["order"])
+    for conversation in conversations:
+        del conversation["order"]
+    return conversations
 
 
 def _person_from_sender(sender: str) -> tuple[str, str]:

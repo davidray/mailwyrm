@@ -424,11 +424,77 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(people[0]["name"], "Ada Lovelace")
         self.assertEqual(people[0]["email"], "ada@example.com")
         self.assertEqual(people[0]["count"], 2)
+        self.assertEqual(people[0]["conversation_count"], 2)
         self.assertEqual(
             [item["subject"] for item in people[0]["items"]],
             ["First", "Second"],
         )
+        self.assertEqual(
+            [item["message_count"] for item in people[0]["items"]],
+            [1, 1],
+        )
         self.assertEqual(people[1]["name"], "Grace Hopper")
+
+    def test_real_people_lane_collapses_messages_by_thread_within_person(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-shared",
+                    history_id="10",
+                    internal_date="1710000000003",
+                    label_ids=["INBOX"],
+                    snippet="Latest reply.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "Re: Introductions",
+                    },
+                ),
+                "msg-2": MessageRecord(
+                    id="msg-2",
+                    thread_id="thread-shared",
+                    history_id="10",
+                    internal_date="1710000000002",
+                    label_ids=["INBOX"],
+                    snippet="Earlier reply.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "Re: Introductions",
+                    },
+                ),
+                "msg-3": MessageRecord(
+                    id="msg-3",
+                    thread_id="thread-other",
+                    history_id="10",
+                    internal_date="1710000000001",
+                    label_ids=["INBOX"],
+                    snippet="Separate conversation.",
+                    headers={
+                        "From": "Ada Lovelace <ada@example.com>",
+                        "Subject": "Lunch",
+                    },
+                ),
+            },
+            classifications={
+                "msg-1": classification("msg-1", category="human", machine_type=None),
+                "msg-2": classification("msg-2", category="human", machine_type=None),
+                "msg-3": classification("msg-3", category="human", machine_type=None),
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        person = payload["lanes"]["human"]["people"][0]
+        self.assertEqual(person["count"], 3)
+        self.assertEqual(person["conversation_count"], 2)
+        self.assertEqual(len(person["items"]), 2)
+        self.assertEqual(person["items"][0]["thread_id"], "thread-shared")
+        self.assertEqual(person["items"][0]["message_id"], "msg-1")
+        self.assertEqual(person["items"][0]["message_count"], 2)
+        self.assertEqual(person["items"][0]["message_ids"], ["msg-1", "msg-2"])
+        self.assertEqual(person["items"][0]["snippet"], "Latest reply.")
+        self.assertEqual(person["items"][1]["thread_id"], "thread-other")
+        self.assertEqual(person["items"][1]["message_count"], 1)
 
     def test_review_type_counts_skip_non_needs_review_items(self) -> None:
         state = MailwyrmState(

@@ -122,6 +122,17 @@
           </div>
           <div class="workflow-grid" id="workflows"></div>
         </section>
+
+        <section class="panel preview-panel" id="preview-panel" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Local preview</p>
+              <h2 id="preview-title">Preview report</h2>
+            </div>
+            <button id="preview-close" type="button">Close</button>
+          </div>
+          <pre id="preview-report"></pre>
+        </section>
       </section>
 
       <section class="panel detail-panel" id="detail-panel" hidden>
@@ -135,16 +146,6 @@
         <div class="detail-content" id="detail-content"></div>
       </section>
 
-      <section class="panel preview-panel" id="preview-panel" hidden>
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Local preview</p>
-            <h2 id="preview-title">Preview report</h2>
-          </div>
-          <button id="preview-close" type="button">Close</button>
-        </div>
-        <pre id="preview-report"></pre>
-      </section>
     </main>
 
     <script src="/app.js"></script>

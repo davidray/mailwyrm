@@ -81,6 +81,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("Real People", static_root.joinpath("app.js").read_text())
         self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
         self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
+        self.assertIn("conversationBadge", static_root.joinpath("app.js").read_text())
         self.assertIn("personInitials", static_root.joinpath("app.js").read_text())
         self.assertIn("prominentSender", static_root.joinpath("app.js").read_text())
         self.assertIn("showAllLaneItems", static_root.joinpath("app.js").read_text())

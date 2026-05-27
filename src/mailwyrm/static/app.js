@@ -285,10 +285,7 @@ function personGroupCard(person, options) {
       { class: "person-messages" },
       person.items.map((item) =>
         messageCard(item, {
-          badge:
-            typeof options.badge === "function"
-              ? options.badge(item)
-              : item.action || options.label,
+          badge: conversationBadge(item, options),
           showSnippet: true,
           showReason: options.showReason || false,
           completeConversation: true,
@@ -299,6 +296,16 @@ function personGroupCard(person, options) {
       )
     ),
   ]);
+}
+
+function conversationBadge(item, options) {
+  if (item.message_count > 1) {
+    return `${item.message_count} messages`;
+  }
+  if (typeof options.badge === "function") {
+    return options.badge(item);
+  }
+  return item.action || options.label;
 }
 
 function personInitials(person) {
@@ -572,7 +579,6 @@ async function completeConversation(item, button) {
       renderPreviewError(payload.error || "Unable to complete conversation.");
       return;
     }
-    renderLocalMutationResult(payload);
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
     renderPreviewError(error.message || "Unable to complete conversation.");
