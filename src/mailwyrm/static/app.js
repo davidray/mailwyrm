@@ -407,19 +407,24 @@ function machineBundleCard(bundle) {
 
 function digestRowCard(group, bundle) {
   return div("article", { class: "item digest-row" }, [
-    div("div", { class: "item-header" }, [
-      div("div", {}, [
-        digestRowTitle(group),
-        group.sender_email ? div("div", { class: "meta" }, group.sender_email) : "",
-      ]),
-      div("div", { class: "digest-row-actions" }, [
-        pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
-        followupButton(group),
-        readLaterButton(group),
-      ]),
+    div("div", { class: "item-sender digest-sender" }, [
+      div("div", { class: "review-sender-name" }, group.sender_name || group.sender),
+      group.sender_email
+        ? div("div", { class: "review-sender-email" }, group.sender_email)
+        : "",
+      pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
     ]),
-    group.summary ? div("p", { class: "snippet" }, group.summary) : "",
-    digestRowControls(group, bundle),
+    div("div", { class: "item-body" }, [
+      div("div", { class: "item-header" }, [
+        div("div", {}, [digestRowTitle(group)]),
+        div("div", { class: "digest-row-actions" }, [
+          followupButton(group),
+          readLaterButton(group),
+        ]),
+      ]),
+      group.summary ? div("p", { class: "snippet" }, group.summary) : "",
+      digestRowControls(group, bundle),
+    ]),
   ]);
 }
 
@@ -852,25 +857,28 @@ function messageCard(item, options) {
   const explanation = [item.reason, metaLine(item)].filter(Boolean).join(" ");
   const sender = personIdentity(item.sender);
   return div("article", { class: "item" }, [
-    div("div", { class: "item-header" }, [
-      div("div", {}, [
-        options.prominentSender ? prominentSender(sender) : "",
-        subjectButton(item, options.mailbox || state.mailbox),
-        options.showSender === false || options.prominentSender
-          ? ""
-          : div("div", { class: "meta" }, item.sender),
+    options.showSender === false
+      ? ""
+      : div("div", { class: "item-sender" }, [
+          options.prominentSender
+            ? prominentSender(sender)
+            : compactSenderIdentity(sender),
+        ]),
+    div("div", { class: "item-body" }, [
+      div("div", { class: "item-header" }, [
+        div("div", {}, [subjectButton(item, options.mailbox || state.mailbox)]),
+        pill(options.badge, explanation),
       ]),
-      pill(options.badge, explanation),
-    ]),
-    options.showReason ? div("p", { class: "reason" }, item.reason) : "",
-    options.showSnippet && item.snippet
-      ? div("p", { class: "snippet" }, item.snippet)
-      : "",
-    options.reviewControls ? inlineReviewControls(item) : "",
-    div("div", { class: "item-actions" }, [
-      options.reassignToDigest ? digestReassignmentSelect(item) : "",
-      options.completeConversation ? completeConversationButton(item) : "",
-      link(item.gmail_url, "Open in Gmail", "secondary-link"),
+      options.showReason ? div("p", { class: "reason" }, item.reason) : "",
+      options.showSnippet && item.snippet
+        ? div("p", { class: "snippet" }, item.snippet)
+        : "",
+      options.reviewControls ? inlineReviewControls(item) : "",
+      div("div", { class: "item-actions" }, [
+        options.reassignToDigest ? digestReassignmentSelect(item) : "",
+        options.completeConversation ? completeConversationButton(item) : "",
+        link(item.gmail_url, "Open in Gmail", "secondary-link"),
+      ]),
     ]),
   ]);
 }
@@ -884,6 +892,15 @@ function personIdentity(sender) {
 }
 
 function prominentSender(sender) {
+  return div("div", { class: "review-sender" }, [
+    div("div", { class: "review-sender-name" }, sender.name),
+    sender.email && sender.email !== sender.name
+      ? div("div", { class: "review-sender-email" }, sender.email)
+      : "",
+  ]);
+}
+
+function compactSenderIdentity(sender) {
   return div("div", { class: "review-sender" }, [
     div("div", { class: "review-sender-name" }, sender.name),
     sender.email && sender.email !== sender.name
