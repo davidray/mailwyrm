@@ -1,6 +1,6 @@
 import unittest
 
-from mailwyrm.cli import include_spam_trash_for_mailbox, label_ids_for_mailbox
+from mailwyrm.sync import include_spam_trash_for_mailbox, label_ids_for_mailbox
 
 
 class SyncMailboxTest(unittest.TestCase):

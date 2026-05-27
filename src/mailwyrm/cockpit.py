@@ -366,6 +366,8 @@ def _workflow_controls(
             "count": None,
             "mutates_gmail": False,
             "description": "Refresh the local index from Gmail for this mailbox scope.",
+            "app_action": "sync",
+            "action_label": "Sync Gmail",
             "primary_command": (
                 "uv run mailwyrm sync"
                 f"{mailbox_arg}{limit_arg}"
@@ -380,6 +382,8 @@ def _workflow_controls(
             "count": classify_count,
             "mutates_gmail": False,
             "description": "Classify indexed messages before label or action previews.",
+            "app_action": "classify",
+            "action_label": "Classify",
             "primary_command": f"uv run mailwyrm classify{mailbox_arg}{limit_arg}",
         },
         {

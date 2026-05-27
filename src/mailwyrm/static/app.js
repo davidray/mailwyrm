@@ -3,10 +3,14 @@ const state = {
   limit: 25,
   auditLimit: 10,
   activeTab: "people",
+  refreshTimer: null,
 };
 
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
-const localActionWorkflows = new Set(["classify"]);
+const appActionEndpoints = {
+  sync: "/api/gmail-sync",
+  classify: "/api/local-classify",
+};
 const reviewMachineTypes = [
   ["marketing", "Marketing"],
   ["transactional", "Transactional"],
@@ -52,7 +56,7 @@ els.mailbox.addEventListener("change", () => {
   state.mailbox = els.mailbox.value;
   loadCockpit();
 });
-els.refresh.addEventListener("click", loadCockpit);
+els.refresh.addEventListener("click", () => refreshCockpit());
 els.profileAvatar.addEventListener("click", () => {
   const isOpen = !els.profilePopover.hidden;
   els.profilePopover.hidden = isOpen;
@@ -73,6 +77,40 @@ els.detailClose.addEventListener("click", () => {
 });
 
 loadCockpit();
+
+async function refreshCockpit() {
+  setRefreshState("loading");
+  const startedAt = Date.now();
+  await loadCockpit();
+  const remaining = Math.max(0, 900 - (Date.now() - startedAt));
+  window.setTimeout(() => {
+    setRefreshState("success");
+    state.refreshTimer = window.setTimeout(() => {
+      setRefreshState("idle");
+    }, 1300);
+  }, remaining);
+}
+
+function setRefreshState(mode) {
+  if (state.refreshTimer) {
+    window.clearTimeout(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+  els.refresh.classList.remove("refreshing", "refresh-success");
+  els.refresh.disabled = mode === "loading";
+  els.refresh.setAttribute("aria-busy", mode === "loading" ? "true" : "false");
+  if (mode === "loading") {
+    els.refresh.classList.add("refreshing");
+    els.refresh.textContent = "Refreshing";
+    return;
+  }
+  if (mode === "success") {
+    els.refresh.classList.add("refresh-success");
+    els.refresh.textContent = "Refreshed";
+    return;
+  }
+  els.refresh.textContent = "Refresh";
+}
 
 function activateTab(tabName) {
   state.activeTab = tabName;
@@ -930,15 +968,16 @@ function renderWorkflows(workflows) {
 
 function workflowCard(workflow) {
   const countText = workflow.count === null ? "" : `${workflow.count} candidates`;
+  const appAction = workflowAppAction(workflow);
   const controls = [];
-  if (localActionWorkflows.has(workflow.id)) {
-    controls.push(localActionButton(workflow));
+  if (appAction) {
+    controls.push(appActionButton(workflow));
   }
   if (previewableWorkflows.has(workflow.id)) {
     controls.push(previewButton(workflow));
   }
 
-  return div("article", { class: `workflow ${workflow.id}` }, [
+  return div("article", { class: `workflow ${workflow.id}`, "data-workflow-id": workflow.id }, [
     div("div", { class: "workflow-topline" }, [
       pill(workflow.phase),
       div("div", { class: "workflow-state" }, [
@@ -952,22 +991,33 @@ function workflowCard(workflow) {
   ]);
 }
 
-function localActionButton(workflow) {
-  const button = div("button", { type: "button", class: "run-local-action" }, "Run classify");
-  button.addEventListener("click", () => runLocalAction(workflow.id, button));
+function workflowAppAction(workflow) {
+  const action = workflow.app_action || workflow.id;
+  return appActionEndpoints[action] ? action : "";
+}
+
+function appActionButton(workflow) {
+  const button = div(
+    "button",
+    { type: "button", class: "run-local-action" },
+    workflow.action_label || "Run"
+  );
+  button.addEventListener("click", () => runAppAction(workflow, button));
   return button;
 }
 
-async function runLocalAction(workflowId, button) {
+async function runAppAction(workflow, button) {
   const params = new URLSearchParams({
     mailbox: state.mailbox,
     limit: String(state.limit),
   });
+  const endpoint = appActionEndpoints[workflowAppAction(workflow)];
   const previousText = button.textContent;
+  clearWorkflowFeedback(button);
   button.disabled = true;
   button.textContent = "Running";
   try {
-    const response = await fetch(`/api/local-classify?${params}`, {
+    const response = await fetch(`${endpoint}?${params}`, {
       method: "POST",
       headers: {
         "X-Mailwyrm-App": "local-ui",
@@ -975,13 +1025,25 @@ async function runLocalAction(workflowId, button) {
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to run local action.");
+      renderWorkflowFeedback(button, {
+        title: "Action failed",
+        lines: [payload.error || "Unable to run action."],
+        tone: "error",
+      });
       return;
     }
-    renderLocalActionResult(payload);
     await loadCockpit();
+    renderWorkflowFeedbackForId(workflow.id, {
+      title: payload.title,
+      lines: actionReportLines(payload),
+      tone: "success",
+    });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to run local action.");
+    renderWorkflowFeedback(button, {
+      title: "Action failed",
+      lines: [error.message || "Unable to run action."],
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
@@ -1025,9 +1087,11 @@ function renderWorkflowPreview(payload) {
   revealPreviewPanel();
 }
 
-function renderLocalActionResult(payload) {
-  els.previewTitle.textContent = payload.title;
-  els.previewReport.textContent = [
+function actionReportLines(payload) {
+  if (payload.report_lines && payload.report_lines.length) {
+    return [payload.message, "", ...payload.report_lines];
+  }
+  return [
     payload.message,
     "",
     `Mailbox: ${payload.mailbox}`,
@@ -1035,8 +1099,38 @@ function renderLocalActionResult(payload) {
     `Classified locally: ${payload.classified_messages}`,
     `Already classified: ${payload.skipped_already_classified}`,
     "Gmail was not modified.",
-  ].join("\n");
-  revealPreviewPanel();
+  ];
+}
+
+function clearWorkflowFeedback(button) {
+  const card = button.closest(".workflow");
+  card?.querySelector(".workflow-feedback")?.remove();
+}
+
+function renderWorkflowFeedbackForId(workflowId, options) {
+  const card = els.workflows.querySelector(`[data-workflow-id="${workflowId}"]`);
+  if (!card) {
+    return;
+  }
+  renderWorkflowFeedback(card, options);
+}
+
+function renderWorkflowFeedback(target, { title, lines, tone }) {
+  const card = target.closest ? target.closest(".workflow") : target;
+  if (!card) {
+    return;
+  }
+  card.querySelector(".workflow-feedback")?.remove();
+  const feedback = div("div", { class: `workflow-feedback ${tone}` }, [
+    div("strong", {}, title),
+    ...lines.map((line) => div("p", {}, line)),
+  ]);
+  const actions = card.querySelector(".workflow-actions");
+  if (actions) {
+    actions.insertAdjacentElement("afterend", feedback);
+    return;
+  }
+  card.append(feedback);
 }
 
 function renderLocalMutationResult(payload) {

@@ -9,6 +9,7 @@ from mailwyrm.sync import (
     reconcile_history,
     render_history_reconcile_summary,
     render_sync_summary,
+    sync_mailbox_from_gmail,
     SyncStats,
 )
 
@@ -108,6 +109,49 @@ class SyncTest(unittest.TestCase):
             "Synced 3 inbox message(s) for user@example.com. "
             "New: 1; updated: 1; unchanged: 1; label changes: 1.",
         )
+
+    def test_sync_mailbox_from_gmail_fetches_bodies_for_app_workflow(self) -> None:
+        state = MailwyrmState()
+        client = FakeSyncClient()
+
+        stats = sync_mailbox_from_gmail(
+            client,
+            state,
+            limit=10,
+            mailbox="inbox",
+            include_body=True,
+            body_char_limit=9,
+        )
+
+        self.assertEqual(stats, SyncStats(fetched=1, new=1))
+        self.assertEqual(state.account_email, "user@example.com")
+        self.assertEqual(state.history_id, "42")
+        self.assertEqual(state.last_sync_mailbox, "inbox")
+        self.assertEqual(client.list_kwargs["label_ids"], ("INBOX",))
+        self.assertEqual(client.full_message_ids, ["msg-1"])
+        self.assertEqual(client.metadata_message_ids, [])
+        self.assertEqual(state.messages["msg-1"].body_text, "Body text")
+
+    def test_sync_mailbox_from_gmail_preserves_body_on_metadata_refresh(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", body_text="Previously synced body."),
+            }
+        )
+        client = FakeSyncClient()
+
+        stats = sync_mailbox_from_gmail(
+            client,
+            state,
+            limit=10,
+            mailbox="all-mail",
+        )
+
+        self.assertEqual(stats, SyncStats(fetched=1, unchanged=1))
+        self.assertIsNone(client.list_kwargs["label_ids"])
+        self.assertEqual(client.metadata_message_ids, ["msg-1"])
+        self.assertEqual(client.full_message_ids, [])
+        self.assertEqual(state.messages["msg-1"].body_text, "Previously synced body.")
 
     def test_reconcile_history_applies_label_adds_and_removes(self) -> None:
         state = MailwyrmState(
@@ -288,6 +332,46 @@ class SyncTest(unittest.TestCase):
             "Label changes: 3; deleted messages: 1; unknown messages: 4; "
             "cursor: advanced.",
         )
+
+
+class FakeSyncClient:
+    def __init__(self) -> None:
+        self.metadata_message_ids: list[str] = []
+        self.full_message_ids: list[str] = []
+        self.list_kwargs = {}
+
+    def profile(self):
+        return {"emailAddress": "user@example.com", "historyId": "42"}
+
+    def list_messages(self, **kwargs):
+        self.list_kwargs = kwargs
+        return [{"id": "msg-1"}]
+
+    def get_message_metadata(self, message_id):
+        self.metadata_message_ids.append(message_id)
+        return self._message()
+
+    def get_message_full(self, message_id):
+        self.full_message_ids.append(message_id)
+        return {
+            **self._message(),
+            "payload": {
+                "headers": [{"name": "Subject", "value": "Hello"}],
+                "mimeType": "text/plain",
+                "body": {"data": "Qm9keSB0ZXh0IGZvciBjbGFzc2lmaWNhdGlvbg"},
+            },
+        }
+
+    def _message(self):
+        return {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "historyId": "10",
+            "internalDate": "1710000000000",
+            "labelIds": ["INBOX"],
+            "snippet": "Snippet",
+            "payload": {"headers": [{"name": "Subject", "value": "Hello"}]},
+        }
 
 
 if __name__ == "__main__":

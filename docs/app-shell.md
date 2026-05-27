@@ -3,9 +3,9 @@
 `mailwyrm app` runs the first local Mailwyrm application.
 
 It serves a browser dashboard for the daily cockpit from local state. It can
-classify locally indexed messages, save local review resolutions into Mailwyrm
-state, and perform explicit user-approved bundle actions when Gmail modify
-credentials are configured.
+sync Gmail into the local index, classify locally indexed messages, save local
+review resolutions into Mailwyrm state, and perform explicit user-approved
+bundle actions when Gmail modify credentials are configured.
 
 Example:
 
@@ -30,6 +30,8 @@ The app exposes:
 - `/api/daily-cockpit`: structured JSON for the same daily cockpit data.
 - `/api/message-detail`: read-only local message detail from indexed state.
 - `/api/workflow-preview`: read-only local reports for preview workflows.
+- `/api/gmail-sync`: Gmail read action that refreshes the local index for the
+  selected mailbox scope with bounded body text for classification.
 - `/api/local-classify`: local-only classification for indexed messages.
 - `/api/review-resolution`: local-only review resolution for indexed messages.
 - `/api/followup`: local-only follow-up markers for indexed digest messages.
@@ -80,6 +82,8 @@ It shows:
 - Recent Gmail mutation audit events.
 - Preview-first workflow controls for local classification, daily preview,
   label preview, archive preview, and trash preview.
+- App-owned workflow buttons for Gmail sync and local classification, so the
+  normal daily loop does not require copying commands into a terminal.
 - In-app read-only preview reports for daily preview, label preview, mailbox
   action preview, and trash preview in the Tools tab.
 - In-app local classification and review resolution for indexed messages in
@@ -87,13 +91,14 @@ It shows:
 
 ## Trust Boundary
 
-The app can write local Mailwyrm classification, correction, and follow-up
-state for indexed messages. It may also render local preview reports from
-indexed Mailwyrm state. A category-level "Got it" button is an explicit
-user-approved Gmail mutation: when Gmail modify credentials are configured, it
-moves every non-follow-up message in that machine-mail bundle to Gmail Trash
-and writes local audit events. Completing a Real People conversation is also an explicit
-user-approved Gmail mutation: it archives the Gmail thread by removing `INBOX`
-and writes local audit events for indexed messages in that thread. Gmail
-remains the source of truth, and other mailbox mutations still happen through
-explicit CLI commands that print their preview reports before applying changes.
+The app can read Gmail to refresh local Mailwyrm state. It can also write local
+Mailwyrm classification, correction, and follow-up state for indexed messages.
+It may render local preview reports from indexed Mailwyrm state. A category-level
+"Got it" button is an explicit user-approved Gmail mutation: when Gmail modify
+credentials are configured, it moves every non-follow-up message in that
+machine-mail bundle to Gmail Trash and writes local audit events. Completing a
+Real People conversation is also an explicit user-approved Gmail mutation: it
+archives the Gmail thread by removing `INBOX` and writes local audit events for
+indexed messages in that thread. Gmail remains the source of truth, and
+remaining mailbox mutations still happen through explicit CLI commands that
+print their preview reports before applying changes.
