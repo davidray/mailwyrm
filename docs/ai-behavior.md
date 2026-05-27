@@ -54,6 +54,13 @@ Avoid vague summaries such as "You received an update from..." when the message 
 
 ## Policy Learning
 
+Review actions are learning signals. When the user resolves a message from
+Review into Real People, Protect, Archive, or Trash, Mailwyrm records a local
+classification correction for that message. The corrected classification should
+immediately drive the current cockpit: machine resolutions leave Review and
+appear in the selected machine digest category, while human resolutions move
+into Real People.
+
 Mailwyrm may suggest durable policies based on repeated user behavior, but the user should approve policies before they cause destructive actions.
 
 Example policies:

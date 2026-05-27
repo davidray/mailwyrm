@@ -230,6 +230,43 @@ class CockpitTest(unittest.TestCase):
             classify_workflow["primary_command"],
         )
 
+    def test_review_resolution_moves_message_from_review_to_digest_bundle(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Morning headlines")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="needs_review",
+                    machine_type=None,
+                    review_type="uncertain_machine",
+                    importance="medium",
+                    automation_safety="low",
+                    suggested_actions=["review", "protect"],
+                )
+            },
+            corrections={
+                "msg-1": ClassificationCorrection(
+                    message_id="msg-1",
+                    category="machine",
+                    machine_type="news",
+                    reason="User resolved this from the Review card.",
+                    suggested_actions=["digest", "trash"],
+                    importance="low",
+                    automation_safety="high",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+
+        self.assertEqual(payload["lanes"]["needs_review"]["total_items"], 0)
+        self.assertEqual(payload["attention"]["machine"], 1)
+        self.assertEqual(payload["digest"]["bundles"][0]["title"], "News")
+        self.assertEqual(
+            payload["digest"]["bundles"][0]["headlines"][0]["subject"],
+            "Morning headlines",
+        )
+
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(
             MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),
