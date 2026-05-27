@@ -16,10 +16,9 @@ Generated assets:
 
 - `src/mailwyrm/static/icons/bookwyrm-mail-icon.png` is the current preferred
   1024px app-icon source.
-- `src/mailwyrm/static/icons/bookwyrm-mail-icon-candidate-1.png` is the selected
-  source concept at generation size.
-- `src/mailwyrm/static/icons/bookwyrm-mail-icon-candidate-2.png` is a denser
-  manuscript/envelope concept.
+- `src/mailwyrm/static/icons/bookwyrm-mail-icon-candidate-1.png` is a circular
+  envelope-forward concept.
+- `src/mailwyrm/static/icons/bookwyrm-mail-icon-candidate-2.png` is the selected
+  manuscript/envelope source concept at generation size.
 - `src/mailwyrm/static/icons/bookwyrm-mail-icon-candidate-3.png` is a mailbox
   and message-chest concept.
-
