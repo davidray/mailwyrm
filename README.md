@@ -8,7 +8,9 @@ into a calm digest with links back to the original messages.
 Bookwyrm Foundation is the canonical source for ecosystem philosophy, tone,
 design principles, AI governance, stewardship, and trust. This repository
 contains only Bookwyrm Mail-specific product, architecture, Gmail, and workflow
-guidance.
+guidance. Foundation lives at
+`https://github.com/davidray/bookwyrm-foundation`; in Dave's local workspace it
+is expected beside this repo as `../bookwyrm-foundation`.
 
 The project should treat Gmail as the source of truth. Mailwyrm is not a separate mailbox, a forwarding service, or a parallel archive. Actions taken in Mailwyrm should be reflected in Gmail, and actions taken in Gmail should be reflected back in Mailwyrm.
 
@@ -31,8 +33,8 @@ Machine mail is not automatically worthless. Some machine mail is important, sen
 
 ## Canonical Docs
 
-- Bookwyrm Foundation: canonical ecosystem philosophy, tone, design, trust, and
-  AI governance.
+- Bookwyrm Foundation (`https://github.com/davidray/bookwyrm-foundation`):
+  canonical ecosystem philosophy, tone, design, trust, and AI governance.
 - [Product brief](docs/product-brief.md): the durable product vision and MVP shape.
 - [Architecture notes](docs/architecture.md): Gmail-native sync, labels, actions, and data boundaries.
 - [AI behavior](docs/ai-behavior.md): classification, summarization, confidence, and automation principles.

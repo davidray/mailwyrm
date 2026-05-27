@@ -12,15 +12,18 @@ foundation guidance and should only define product-specific implementation
 details.
 
 When making product, design, trust, or AI-behavior changes, defer to the
-`bookwyrm-foundation` repository first. This repo should not duplicate broad
-Bookwyrm philosophy or design-system guidance; it should describe how those
-principles apply to Bookwyrm Mail.
+Bookwyrm Foundation repository first:
+`https://github.com/davidray/bookwyrm-foundation`. In Dave's local workspace,
+it is expected to be checked out beside this repo at
+`../bookwyrm-foundation`. This repo should not duplicate broad Bookwyrm
+philosophy or design-system guidance; it should describe how those principles
+apply to Bookwyrm Mail.
 
 Before making product or architecture changes, read:
 
-1. `bookwyrm-foundation/README.md`
-2. `bookwyrm-foundation/INDEX.md`
-3. `bookwyrm-foundation/codex/foundational-agent-instructions.md`
+1. `../bookwyrm-foundation/README.md`
+2. `../bookwyrm-foundation/INDEX.md`
+3. `../bookwyrm-foundation/codex/foundational-agent-instructions.md`
 4. [README.md](README.md)
 5. [docs/product-brief.md](docs/product-brief.md)
 6. [docs/architecture.md](docs/architecture.md)

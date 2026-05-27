@@ -60,7 +60,7 @@ cleared by "Got it" until the marker is explicitly removed.
 ## Policy Learning
 
 Review actions are learning signals. When the user resolves a message from
-Review into Real People or a machine-mail category, Mailwyrm records a local
+Review into Correspondence or a machine-mail category, Mailwyrm records a local
 classification correction for that message. The corrected classification should
 immediately drive the current app view: machine resolutions leave Review and
 appear in the selected machine digest category, while human resolutions move
