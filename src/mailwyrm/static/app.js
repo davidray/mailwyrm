@@ -406,10 +406,112 @@ function machineBundleCard(bundle) {
           group.subject ? div("p", { class: "digest-subject" }, group.subject) : "",
           group.sender_email ? div("p", { class: "meta" }, group.sender_email) : "",
           group.summary ? div("p", { class: "meta" }, group.summary) : "",
+          digestRowControls(group, bundle),
         ])
       )
     ),
   ]);
+}
+
+function digestRowControls(group, bundle) {
+  return div("div", { class: "digest-row-controls" }, [
+    digestCategorySelect(group, bundle.machine_type),
+    ...digestMessageControls(group),
+  ]);
+}
+
+function digestCategorySelect(group, currentMachineType) {
+  const select = div(
+    "select",
+    {
+      class: "digest-category-select",
+      "aria-label": "Move digest row to category",
+      title: "Move this digest row to another category.",
+      "data-current-value": currentMachineType,
+    },
+    reviewMachineTypes.map(([type, label]) =>
+      div("option", { value: type }, label)
+    )
+  );
+  select.value = currentMachineType;
+  select.addEventListener("change", () =>
+    updateDigestCategory(group.message_ids, select.value, select)
+  );
+  return select;
+}
+
+function digestMessageControls(group) {
+  const messages = group.messages || [];
+  if (messages.length === 1) {
+    const message = messages[0];
+    return [
+      detailButton(message, state.mailbox),
+      link(message.gmail_url, "Open in Gmail", "secondary-link"),
+    ];
+  }
+  if (messages.length > 1) {
+    return [
+      div("details", { class: "digest-message-list" }, [
+        div("summary", {}, `Read ${messages.length} emails`),
+        div(
+          "div",
+          { class: "digest-message-items" },
+          messages.map((message) =>
+            div("div", { class: "digest-message-item" }, [
+              div("span", {}, message.subject),
+              div("div", { class: "digest-message-actions" }, [
+                detailButton(message, state.mailbox),
+                link(message.gmail_url, "Open in Gmail", "secondary-link"),
+              ]),
+            ])
+          )
+        ),
+      ]),
+    ];
+  }
+  return [];
+}
+
+async function updateDigestCategory(messageIds, machineType, select) {
+  const previousValue = select.dataset.currentValue || select.value;
+  if (machineType === previousValue) {
+    return;
+  }
+  select.disabled = true;
+  try {
+    const response = await fetch("/api/digest-category", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        machine_type: machineType,
+        reason: "User moved this digest row to another category.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      select.value = previousValue;
+      renderBundleFeedback(select, {
+        title: "Category failed",
+        message: payload.error || "Unable to update digest category.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    select.value = previousValue;
+    renderBundleFeedback(select, {
+      title: "Category failed",
+      message: error.message || "Unable to update digest category.",
+      tone: "error",
+    });
+  } finally {
+    select.disabled = false;
+  }
 }
 
 function followupButton(group) {

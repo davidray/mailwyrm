@@ -18,6 +18,7 @@ from mailwyrm.app import (
     apply_gmail_labels,
     apply_trash_after_digest,
     build_workflow_preview_payload,
+    change_digest_category,
     classify_local_messages,
     create_app_server,
     sync_gmail_messages,
@@ -157,6 +158,11 @@ class AppTest(unittest.TestCase):
         self.assertIn("bundle-feedback", static_root.joinpath("app.js").read_text())
         self.assertIn("bundle-feedback", static_root.joinpath("app.css").read_text())
         self.assertIn("data-machine-type", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/digest-category", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestCategorySelect", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestMessageControls", static_root.joinpath("app.js").read_text())
+        self.assertIn("digest-row-controls", static_root.joinpath("app.css").read_text())
+        self.assertIn("digest-message-list", static_root.joinpath("app.css").read_text())
         self.assertIn("followupButton", static_root.joinpath("app.js").read_text())
         self.assertIn("sender_groups", static_root.joinpath("app.js").read_text())
         self.assertIn("digest-row-heading", static_root.joinpath("app.css").read_text())
@@ -486,6 +492,27 @@ class AppTest(unittest.TestCase):
         self.assertIn("Trash policy: enabled", result["report"])
         self.assertEqual(client.trashed, ["msg-1"])
         self.assertEqual(state.messages["msg-1"].label_ids, ["TRASH"])
+
+    def test_change_digest_category_records_local_corrections(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Promo")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+
+        result = change_digest_category(
+            state,
+            message_ids=["msg-1"],
+            machine_type="news",
+            reason="User moved this digest row to another category.",
+        )
+
+        self.assertEqual(result["changed"], 1)
+        self.assertEqual(state.corrections["msg-1"].category, "machine")
+        self.assertEqual(state.corrections["msg-1"].machine_type, "news")
+        self.assertEqual(
+            state.corrections["msg-1"].reason,
+            "User moved this digest row to another category.",
+        )
 
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))

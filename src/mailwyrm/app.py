@@ -154,6 +154,9 @@ def _handler(
             if parsed_url.path == "/api/followup":
                 self._send_followup()
                 return
+            if parsed_url.path == "/api/digest-category":
+                self._send_digest_category()
+                return
             if parsed_url.path == "/api/conversation-complete":
                 self._send_conversation_complete()
                 return
@@ -568,6 +571,50 @@ def _handler(
                         "Marked message(s) for follow-up."
                         if followup
                         else "Removed follow-up marker."
+                    ),
+                    **result,
+                }
+            )
+
+        def _send_digest_category(self) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            try:
+                request = self._read_json_request()
+                message_ids = _request_string_list(request, "message_ids")
+                machine_type = _request_string(request, "machine_type")
+                reason = _optional_request_string(request, "reason") or ""
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                result = change_digest_category(
+                    state,
+                    message_ids=message_ids,
+                    machine_type=machine_type,
+                    reason=reason,
+                )
+            except CorrectionError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(
+                {
+                    "title": "Digest Category Updated",
+                    "mutated_local_state": result["changed"] > 0,
+                    "mutates_gmail": False,
+                    "message": (
+                        f"Moved {result['changed']} message(s) to "
+                        f"{machine_type.replace('_', ' ')}."
                     ),
                     **result,
                 }
@@ -1060,6 +1107,31 @@ def apply_trash_after_digest(
         "gmail_refresh_hint": (
             "Gmail may need a browser refresh before trashed messages disappear."
         ),
+    }
+
+
+def change_digest_category(
+    state: MailwyrmState,
+    *,
+    message_ids: list[str],
+    machine_type: str,
+    reason: str = "",
+) -> dict[str, object]:
+    changed = 0
+    for message_id in message_ids:
+        correction = add_review_resolution(
+            state,
+            message_id=message_id,
+            resolution="machine",
+            machine_type=machine_type,
+            reason=reason or f"User moved digest item to {machine_type.replace('_', ' ')}.",
+        )
+        if correction.machine_type == machine_type:
+            changed += 1
+    return {
+        "changed": changed,
+        "message_ids": message_ids,
+        "machine_type": machine_type,
     }
 
 

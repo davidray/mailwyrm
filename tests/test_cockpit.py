@@ -339,6 +339,21 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(groups[0]["sender_email"], "sender@example.com")
         self.assertEqual(groups[0]["count"], 2)
         self.assertEqual(groups[0]["message_ids"], ["msg-1", "msg-2"])
+        self.assertEqual(
+            groups[0]["messages"],
+            [
+                {
+                    "message_id": "msg-1",
+                    "subject": "Copilot finished one",
+                    "gmail_url": "https://mail.google.com/mail/u/0/#inbox/msg-1",
+                },
+                {
+                    "message_id": "msg-2",
+                    "subject": "Copilot finished two",
+                    "gmail_url": "https://mail.google.com/mail/u/0/#inbox/msg-2",
+                },
+            ],
+        )
         self.assertEqual(groups[0]["followup_count"], 1)
         self.assertEqual(groups[0]["subject"], "")
         self.assertEqual(

@@ -534,6 +534,58 @@ button:disabled {
   gap: 6px;
 }
 
+.digest-row-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.digest-category-select {
+  min-width: 150px;
+  height: 32px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.digest-message-list {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.digest-message-list summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.digest-message-items {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.digest-message-item,
+.digest-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.digest-message-item {
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.digest-message-item span {
+  overflow-wrap: anywhere;
+}
+
+.digest-message-actions {
+  flex: 0 0 auto;
+}
+
 .followup-toggle {
   height: 28px;
   padding: 0 10px;

@@ -661,6 +661,7 @@ def _digest_bundle_payload(
         "sender_groups": _digest_sender_groups(
             bundle.items,
             state=state,
+            mailbox=mailbox,
             group_by_sender=_group_digest_category_by_sender(bundle.machine_type),
         ),
     }
@@ -674,6 +675,7 @@ def _digest_sender_groups(
     items,
     *,
     state: MailwyrmState,
+    mailbox: str,
     group_by_sender: bool,
 ) -> list[dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
@@ -697,13 +699,21 @@ def _digest_sender_groups(
                 "message_ids": [],
                 "followup_count": 0,
                 "subjects": [],
+                "messages": [],
                 "summaries": [],
-                "gmail_url": _gmail_url(item.message.id),
+                "gmail_url": _gmail_url(item.message.id, mailbox=mailbox),
                 "order": len(groups),
             },
         )
         group["count"] += 1
         group["message_ids"].append(item.message.id)
+        group["messages"].append(
+            {
+                    "message_id": item.message.id,
+                    "subject": _header(item.message, "Subject", "(no subject)"),
+                    "gmail_url": _gmail_url(item.message.id, mailbox=mailbox),
+                }
+        )
         if item.message.id in state.followups:
             group["followup_count"] += 1
         group["subjects"].append(_header(item.message, "Subject", "(no subject)"))
