@@ -258,6 +258,27 @@ button:disabled {
   background: var(--panel);
 }
 
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8edf3;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tab.active .tab-count {
+  background: #e7f4ef;
+  color: var(--green);
+}
+
 .secondary-tab {
   margin-left: auto;
   color: #8a95a5;
@@ -474,26 +495,85 @@ button:disabled {
   min-width: 96px;
 }
 
-.headline-list {
+.bundle-feedback {
   display: grid;
-  gap: 10px;
-  margin: 0;
-  padding-left: 18px;
+  gap: 4px;
+  margin-bottom: 10px;
+  border: 1px solid #b8dccf;
+  border-radius: 6px;
+  background: #f3fbf7;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
-.headline-list li {
-  min-width: 0;
+.bundle-feedback strong,
+.bundle-feedback p {
+  margin: 0;
+}
+
+.bundle-feedback strong {
+  color: var(--ink);
+}
+
+.bundle-feedback.error {
+  border-color: #f0b8ac;
+  background: #fff7f5;
+}
+
+.bundle-feedback.error strong {
+  color: #9f2d20;
+}
+
+.undo-complete {
+  border-color: #d6b76a;
+  background: #fff8df;
+  color: #7a5200;
+}
+
+.context-feedback {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  border: 1px solid #b8dccf;
+  border-radius: 6px;
+  background: #f3fbf7;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.context-feedback strong,
+.context-feedback p {
+  margin: 0;
+}
+
+.context-feedback strong {
+  color: var(--ink);
+}
+
+.context-feedback.error {
+  border-color: #f0b8ac;
+  background: #fff7f5;
+}
+
+.context-feedback.error strong {
+  color: #9f2d20;
+}
+
+.headline-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.digest-row {
+  box-shadow: none;
 }
 
 .headline-list strong {
   overflow-wrap: anywhere;
-}
-
-.digest-row-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
 }
 
 .digest-row-actions {
@@ -504,10 +584,71 @@ button:disabled {
   gap: 6px;
 }
 
-.followup-toggle {
+.digest-row-controls {
+  margin-top: 10px;
+}
+
+.digest-category-select {
+  min-width: 150px;
+  height: 32px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.human-reassign-select {
+  min-width: 165px;
+}
+
+.digest-message-list {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.digest-message-list summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-weight: 800;
+}
+
+.digest-message-items {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.digest-message-item,
+.digest-message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.digest-message-item {
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.digest-message-item span {
+  overflow-wrap: anywhere;
+}
+
+.digest-message-actions {
+  flex: 0 0 auto;
+}
+
+.icon-toggle {
+  display: grid;
+  width: 32px;
+  min-width: 32px;
   height: 28px;
-  padding: 0 10px;
-  font-size: 0.78rem;
+  padding: 0;
+  place-items: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.followup-toggle {
+  font-size: 0.95rem;
 }
 
 .followup-toggle.active {
@@ -516,18 +657,18 @@ button:disabled {
   color: var(--gold);
 }
 
-.followup-identity {
-  margin-top: 3px;
-  color: var(--gold);
-  font-size: 0.78rem;
-  font-weight: 900;
+.read-later-toggle.active {
+  border-color: #e7a9bd;
+  background: #fff3f7;
+  color: #a93f63;
 }
 
-.digest-subject {
-  margin-bottom: 2px;
-  color: var(--ink);
-  font-weight: 800;
-  overflow-wrap: anywhere;
+.icon-toggle.saving {
+  opacity: 0.68;
+}
+
+.digest-group-title {
+  font-size: 1rem;
 }
 
 .item-header {
@@ -619,7 +760,6 @@ button:disabled {
   color: var(--red);
 }
 
-.view-detail,
 .secondary-link,
 .complete-conversation {
   display: inline-flex;
@@ -827,6 +967,22 @@ th {
 .workflow-feedback.success {
   border-color: #b8dccf;
   background: #f3fbf7;
+}
+
+.workflow-feedback.preview {
+  border-color: #c8d6e8;
+  background: #f8fbff;
+}
+
+.workflow-report {
+  max-height: 240px;
+  overflow: auto;
+  margin: 6px 0 0;
+  border-radius: 6px;
+  background: #202a33;
+  color: #f8fafc;
+  padding: 9px 10px;
+  white-space: pre;
 }
 
 code {

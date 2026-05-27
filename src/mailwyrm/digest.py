@@ -101,11 +101,14 @@ def build_digest_items(
     state: MailwyrmState,
     *,
     limit: int | None = None,
+    mailbox: str = "all-mail",
 ) -> list[DigestItem]:
     if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
+    if mailbox not in {"inbox", "all-mail", "trash"}:
+        raise ValueError("mailbox must be one of inbox, all-mail, or trash")
 
-    items = _digest_items(state)
+    items = _digest_items(state, mailbox=mailbox)
     if limit is not None:
         items = items[:limit]
     return items
@@ -115,8 +118,9 @@ def build_digest_bundles(
     state: MailwyrmState,
     *,
     limit: int | None = None,
+    mailbox: str = "all-mail",
 ) -> list[DigestBundle]:
-    items = build_digest_items(state, limit=limit)
+    items = build_digest_items(state, limit=limit, mailbox=mailbox)
     grouped: dict[str, list[DigestItem]] = defaultdict(list)
     for item in items:
         if item.classification.category != "machine":
@@ -170,13 +174,15 @@ def message_has_been_digested(state: MailwyrmState, message_id: str) -> bool:
     return any(event.message_id == message_id for event in state.digest_audit_events)
 
 
-def _digest_items(state: MailwyrmState) -> list[DigestItem]:
+def _digest_items(state: MailwyrmState, *, mailbox: str = "all-mail") -> list[DigestItem]:
     items: list[DigestItem] = []
     for message in sorted(
         state.messages.values(),
         key=lambda record: record.internal_date or "",
         reverse=True,
     ):
+        if not _message_matches_mailbox(message, mailbox):
+            continue
         classification = state.classifications.get(message.id)
         if not classification:
             continue
@@ -190,6 +196,15 @@ def _digest_items(state: MailwyrmState) -> list[DigestItem]:
         ):
             items.append(DigestItem(message=message, classification=classification))
     return items
+
+
+def _message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
+    label_ids = set(message.label_ids)
+    if mailbox == "all-mail":
+        return True
+    if mailbox == "trash":
+        return "TRASH" in label_ids
+    return "INBOX" in label_ids
 
 
 def _section_for(classification: ClassificationRecord) -> str:

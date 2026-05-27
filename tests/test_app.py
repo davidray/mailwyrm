@@ -5,6 +5,7 @@ from mailwyrm.app import (
     APP_MUTATION_HEADER,
     APP_MUTATION_HEADER_VALUE,
     _is_app_mutation_request,
+    _query_bool,
     _query_int,
     _query_mailbox,
     _query_message_id,
@@ -14,7 +15,11 @@ from mailwyrm.app import (
     _request_mailbox,
     _request_string,
     _request_string_list,
+    apply_archive_after_digest,
+    apply_gmail_labels,
+    apply_trash_after_digest,
     build_workflow_preview_payload,
+    change_digest_category,
     classify_local_messages,
     create_app_server,
     sync_gmail_messages,
@@ -26,6 +31,7 @@ from mailwyrm.models import (
     DigestAuditEvent,
     MessageRecord,
 )
+from mailwyrm.gmail import GmailLabel
 from mailwyrm.store import MailwyrmState
 
 
@@ -64,6 +70,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("Real People", static_root.joinpath("index.html").read_text())
         self.assertIn("Daily Digest", static_root.joinpath("index.html").read_text())
         self.assertIn('data-tab="review"', static_root.joinpath("index.html").read_text())
+        self.assertIn('id="review-tab-count"', static_root.joinpath("index.html").read_text())
         self.assertIn('data-tab="tools"', static_root.joinpath("index.html").read_text())
         self.assertIn("secondary-tab", static_root.joinpath("index.html").read_text())
         self.assertIn("tab-panel", static_root.joinpath("index.html").read_text())
@@ -87,7 +94,15 @@ class AppTest(unittest.TestCase):
         self.assertIn("refreshCockpit", static_root.joinpath("app.js").read_text())
         self.assertIn("setRefreshState", static_root.joinpath("app.js").read_text())
         self.assertIn("refresh-success", static_root.joinpath("app.css").read_text())
+        self.assertIn("renderReviewTabCount", static_root.joinpath("app.js").read_text())
+        self.assertIn(".tab-count", static_root.joinpath("app.css").read_text())
         self.assertIn("/api/gmail-sync", static_root.joinpath("app.js").read_text())
+        self.assertIn('params.set("all", "true")', static_root.joinpath("app.js").read_text())
+        self.assertIn("workflow.process_all", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/gmail-labels/apply", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/archive-after-digest", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/trash-after-digest", static_root.joinpath("app.js").read_text())
+        self.assertIn("confirmGmailMutation", static_root.joinpath("app.js").read_text())
         self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
         self.assertIn("renderProfile", static_root.joinpath("app.js").read_text())
         self.assertIn("profileInitial", static_root.joinpath("app.js").read_text())
@@ -95,6 +110,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
         self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
         self.assertIn("conversationBadge", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestReassignmentSelect", static_root.joinpath("app.js").read_text())
+        self.assertIn("reassignRealPeopleItemToDigest", static_root.joinpath("app.js").read_text())
         self.assertIn("pillClassName", static_root.joinpath("app.js").read_text())
         self.assertIn("personInitials", static_root.joinpath("app.js").read_text())
         self.assertIn("prominentSender", static_root.joinpath("app.js").read_text())
@@ -107,6 +124,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("profile-popover", static_root.joinpath("app.css").read_text())
         self.assertIn("person-avatar", static_root.joinpath("app.css").read_text())
         self.assertIn("person-group", static_root.joinpath("app.css").read_text())
+        self.assertIn("human-reassign-select", static_root.joinpath("app.css").read_text())
         self.assertIn(".person-group:first-child", static_root.joinpath("app.css").read_text())
         self.assertNotIn("renderCleanup", static_root.joinpath("app.js").read_text())
         self.assertNotIn("cleanupHeading", static_root.joinpath("app.js").read_text())
@@ -122,6 +140,9 @@ class AppTest(unittest.TestCase):
         self.assertIn("workflowAppAction", static_root.joinpath("app.js").read_text())
         self.assertIn("workflow-feedback", static_root.joinpath("app.js").read_text())
         self.assertIn("workflow-feedback", static_root.joinpath("app.css").read_text())
+        self.assertIn("workflow-report", static_root.joinpath("app.js").read_text())
+        self.assertIn("workflow-report", static_root.joinpath("app.css").read_text())
+        self.assertIn("Preview only. Gmail was not modified.", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/workflow-preview", static_root.joinpath("app.js").read_text())
         self.assertIn("revealPreviewPanel", static_root.joinpath("app.js").read_text())
         self.assertIn('activateTab("tools")', static_root.joinpath("app.js").read_text())
@@ -129,11 +150,16 @@ class AppTest(unittest.TestCase):
         self.assertIn("/api/local-classify", static_root.joinpath("app.js").read_text())
         self.assertIn('"X-Mailwyrm-App": "local-ui"', static_root.joinpath("app.js").read_text())
         self.assertIn("/api/conversation-complete", static_root.joinpath("app.js").read_text())
+        self.assertIn("COMPLETE_UNDO_DELAY_MS = 5000", static_root.joinpath("app.js").read_text())
+        self.assertIn("scheduleCompleteConversation", static_root.joinpath("app.js").read_text())
+        self.assertIn("undoCompleteConversation", static_root.joinpath("app.js").read_text())
         self.assertIn("completeConversation", static_root.joinpath("app.js").read_text())
         self.assertIn("complete-conversation", static_root.joinpath("app.css").read_text())
+        self.assertIn("undo-complete", static_root.joinpath("app.css").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
         self.assertIn("detail-panel", static_root.joinpath("index.html").read_text())
-        self.assertIn("view-detail", static_root.joinpath("app.js").read_text())
+        self.assertNotIn("view-detail", static_root.joinpath("app.js").read_text())
+        self.assertNotIn("Details", static_root.joinpath("app.js").read_text())
         self.assertIn("Review type:", static_root.joinpath("app.js").read_text())
         self.assertIn("correctionLine", static_root.joinpath("app.js").read_text())
         self.assertIn("noopener noreferrer", static_root.joinpath("app.js").read_text())
@@ -142,15 +168,34 @@ class AppTest(unittest.TestCase):
         self.assertIn("/api/review-resolution", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/machine-bundle/got-it", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/followup", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/read-later", static_root.joinpath("app.js").read_text())
         self.assertIn("machineBundleCard", static_root.joinpath("app.js").read_text())
+        self.assertIn("bundle-feedback", static_root.joinpath("app.js").read_text())
+        self.assertIn("bundle-feedback", static_root.joinpath("app.css").read_text())
+        self.assertIn("data-machine-type", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/digest-category", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestCategorySelect", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestMessageControls", static_root.joinpath("app.js").read_text())
+        self.assertIn("digest-row-controls", static_root.joinpath("app.css").read_text())
+        self.assertIn("digest-message-list", static_root.joinpath("app.css").read_text())
+        self.assertIn("digest-row", static_root.joinpath("app.js").read_text())
+        self.assertIn('class: "item digest-row"', static_root.joinpath("app.js").read_text())
+        self.assertIn("digest-group-title", static_root.joinpath("app.css").read_text())
         self.assertIn("followupButton", static_root.joinpath("app.js").read_text())
+        self.assertIn("readLaterButton", static_root.joinpath("app.js").read_text())
+        self.assertIn("read-later-toggle", static_root.joinpath("app.css").read_text())
+        self.assertIn("icon-toggle.saving", static_root.joinpath("app.css").read_text())
+        self.assertNotIn("read-later-identity", static_root.joinpath("app.css").read_text())
+        self.assertNotIn('"Removing"', static_root.joinpath("app.js").read_text())
         self.assertIn("sender_groups", static_root.joinpath("app.js").read_text())
-        self.assertIn("digest-row-heading", static_root.joinpath("app.css").read_text())
-        self.assertIn("digest-subject", static_root.joinpath("app.css").read_text())
+        self.assertNotIn("follow-up needed", static_root.joinpath("app.js").read_text())
+        self.assertNotIn("followup-identity", static_root.joinpath("app.css").read_text())
         self.assertIn("followup-toggle", static_root.joinpath("app.css").read_text())
         self.assertIn("bundle-got-it", static_root.joinpath("app.css").read_text())
         self.assertIn("reviewResolutionSection", static_root.joinpath("app.js").read_text())
         self.assertIn("inlineReviewControls", static_root.joinpath("app.js").read_text())
+        self.assertIn("renderContextFeedback", static_root.joinpath("app.js").read_text())
+        self.assertIn("context-feedback", static_root.joinpath("app.css").read_text())
         self.assertIn("User resolved this from the Review card.", static_root.joinpath("app.js").read_text())
         self.assertIn("machineTypeLabel", static_root.joinpath("app.js").read_text())
         self.assertIn("Spam", static_root.joinpath("app.js").read_text())
@@ -193,6 +238,15 @@ class AppTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "inbox, all-mail, trash"):
             create_app_server(mailbox="spam")
+
+    def test_query_bool_accepts_browser_boolean_values(self) -> None:
+        self.assertTrue(_query_bool({"all": ["true"]}, "all"))
+        self.assertTrue(_query_bool({"all": ["1"]}, "all"))
+        self.assertFalse(_query_bool({}, "all"))
+        self.assertFalse(_query_bool({"all": ["false"]}, "all"))
+
+        with self.assertRaises(ValueError):
+            _query_bool({"all": ["maybe"]}, "all")
 
     def test_query_workflow_accepts_preview_workflows(self) -> None:
         self.assertEqual(
@@ -383,16 +437,161 @@ class AppTest(unittest.TestCase):
         state = MailwyrmState()
         client = FakeAppSyncClient()
 
-        result = sync_gmail_messages(client, state, mailbox="inbox", limit=25)
+        result = sync_gmail_messages(client, state, mailbox="inbox", limit=None)
 
         self.assertEqual(result["title"], "Gmail Sync")
         self.assertEqual(result["mailbox"], "inbox")
         self.assertEqual(result["matched_messages"], 1)
         self.assertFalse(result["mutates_gmail"])
         self.assertIn("Synced 1 inbox message", result["message"])
+        self.assertIn("Fetched the full selected mailbox scope.", result["report_lines"])
         self.assertIn("Gmail was not modified.", result["report_lines"])
         self.assertEqual(client.full_message_ids, ["msg-1"])
+        self.assertIsNone(client.list_kwargs["max_results"])
         self.assertEqual(state.messages["msg-1"].body_text, "Body text")
+
+    def test_apply_gmail_labels_returns_preview_report_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Receipt")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_gmail_labels(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Gmail Labels Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertTrue(result["mutates_gmail"])
+        self.assertIn("Mailwyrm/Machine", result["report"])
+        self.assertEqual(client.added, [("msg-1", ["label-machine"])])
+        self.assertEqual(state.label_audit_events[0].action, "add_labels")
+
+    def test_apply_archive_after_digest_uses_existing_policy_gates(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Receipt"),
+                "msg-2": message("msg-2", "Not digested"),
+            },
+            classifications={
+                "msg-1": classification("msg-1"),
+                "msg-2": classification("msg-2"),
+            },
+            digest_audit_events=[
+                DigestAuditEvent(
+                    message_id="msg-1",
+                    digest_title_date="2026-05-26",
+                    reason="Low-risk machine mail.",
+                    classifier_version="rules-v0",
+                    created_at="2026-05-26T00:00:00+00:00",
+                )
+            ],
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_archive_after_digest(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Archive Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["skipped_not_digested"], 1)
+        self.assertIn("Gmail will be modified after this preview.", result["report"])
+        self.assertEqual(client.removed, [("msg-1", ["INBOX"])])
+        self.assertNotIn("INBOX", state.messages["msg-1"].label_ids)
+        self.assertIn("INBOX", state.messages["msg-2"].label_ids)
+
+    def test_apply_trash_after_digest_uses_policy_gate(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Copilot")},
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    suggested_actions=["digest", "trash"],
+                )
+            },
+            digest_audit_events=[
+                DigestAuditEvent(
+                    message_id="msg-1",
+                    digest_title_date="2026-05-26",
+                    reason="Low-risk notification.",
+                    classifier_version="rules-v0",
+                    created_at="2026-05-26T00:00:00+00:00",
+                )
+            ],
+            automation_policy=AutomationPolicy(trash_after_digest_enabled=True),
+        )
+        client = FakeAppModifyClient()
+
+        result = apply_trash_after_digest(client, state, mailbox="inbox", limit=25)
+
+        self.assertEqual(result["title"], "Trash Applied")
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["skipped_policy_disabled"], 0)
+        self.assertIn("Trash policy: enabled", result["report"])
+        self.assertEqual(client.trashed, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["TRASH"])
+
+    def test_change_digest_category_records_local_corrections(self) -> None:
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", "Promo")},
+            classifications={"msg-1": classification("msg-1")},
+        )
+
+        result = change_digest_category(
+            state,
+            message_ids=["msg-1"],
+            machine_type="news",
+            reason="User moved this digest row to another category.",
+        )
+
+        self.assertEqual(result["changed"], 1)
+        self.assertEqual(state.corrections["msg-1"].category, "machine")
+        self.assertEqual(state.corrections["msg-1"].machine_type, "news")
+        self.assertEqual(
+            state.corrections["msg-1"].reason,
+            "User moved this digest row to another category.",
+        )
+
+    def test_change_digest_category_can_reassign_human_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Personal thread"),
+                "msg-2": message("msg-2", "Personal thread"),
+            },
+            classifications={
+                "msg-1": ClassificationRecord(
+                    message_id="msg-1",
+                    category="human",
+                    machine_type=None,
+                    importance="medium",
+                    automation_safety="low",
+                    confidence=0.82,
+                    reason="Looks like personal correspondence.",
+                    suggested_actions=[],
+                    classifier_version="rules-v0",
+                ),
+                "msg-2": ClassificationRecord(
+                    message_id="msg-2",
+                    category="human",
+                    machine_type=None,
+                    importance="medium",
+                    automation_safety="low",
+                    confidence=0.78,
+                    reason="Looks like personal correspondence.",
+                    suggested_actions=[],
+                    classifier_version="rules-v0",
+                ),
+            },
+        )
+
+        result = change_digest_category(
+            state,
+            message_ids=["msg-1", "msg-2"],
+            machine_type="product_community",
+            reason="User moved this Real People conversation to a digest category.",
+        )
+
+        self.assertEqual(result["changed"], 2)
+        self.assertEqual(state.corrections["msg-1"].category, "machine")
+        self.assertEqual(state.corrections["msg-2"].machine_type, "product_community")
 
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))
@@ -471,11 +670,13 @@ class AppTest(unittest.TestCase):
 class FakeAppSyncClient:
     def __init__(self) -> None:
         self.full_message_ids: list[str] = []
+        self.list_kwargs = {}
 
     def profile(self):
         return {"emailAddress": "user@example.com", "historyId": "42"}
 
     def list_messages(self, **kwargs):
+        self.list_kwargs = kwargs
         return [{"id": "msg-1"}]
 
     def get_message_full(self, message_id):
@@ -493,3 +694,36 @@ class FakeAppSyncClient:
                 "body": {"data": "Qm9keSB0ZXh0"},
             },
         }
+
+
+class FakeAppModifyClient:
+    def __init__(self) -> None:
+        self.added: list[tuple[str, list[str]]] = []
+        self.removed: list[tuple[str, list[str]]] = []
+        self.trashed: list[str] = []
+
+    def ensure_mailwyrm_labels(self, label_names=None):
+        labels = {
+            "Mailwyrm/Human": GmailLabel(id="label-human", name="Mailwyrm/Human"),
+            "Mailwyrm/Machine": GmailLabel(id="label-machine", name="Mailwyrm/Machine"),
+            "Mailwyrm/Needs Review": GmailLabel(
+                id="label-review",
+                name="Mailwyrm/Needs Review",
+            ),
+            "Mailwyrm/Protected": GmailLabel(
+                id="label-protected",
+                name="Mailwyrm/Protected",
+            ),
+        }
+        if label_names is None:
+            return labels
+        return {label_name: labels[label_name] for label_name in label_names}
+
+    def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.added.append((message_id, label_ids))
+
+    def remove_labels_from_message(self, message_id: str, label_ids: list[str]) -> None:
+        self.removed.append((message_id, label_ids))
+
+    def trash_message(self, message_id: str) -> None:
+        self.trashed.append(message_id)

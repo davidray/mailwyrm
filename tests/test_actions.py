@@ -598,6 +598,37 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX", "Label_1"])
         self.assertIn("msg-1", state.followups)
 
+    def test_trash_digest_bundle_skips_read_later_messages(self) -> None:
+        from mailwyrm.models import ReadLaterMarker
+
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", label_ids=["INBOX", "Label_1"]),
+                "msg-2": message("msg-2", label_ids=["INBOX", "Label_1"]),
+            },
+            classifications={
+                "msg-1": classification("msg-1", machine_type="news"),
+                "msg-2": classification("msg-2", machine_type="news"),
+            },
+            read_later={
+                "msg-1": ReadLaterMarker(
+                    message_id="msg-1",
+                    reason="Worth reading.",
+                    created_at="2026-05-25T00:00:00+00:00",
+                )
+            },
+        )
+        plans = build_action_plans(state, mailbox="inbox")
+        client = FakeGmailClient()
+
+        result = trash_digest_bundle(client, state, plans)
+
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.skipped_read_later, 1)
+        self.assertEqual(client.trashed, ["msg-2"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX", "Label_1"])
+        self.assertIn("msg-1", state.read_later)
+
     def test_render_action_audit_reports_recent_events(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", subject="Receipt")},

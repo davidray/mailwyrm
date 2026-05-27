@@ -22,6 +22,7 @@ from mailwyrm.actions import (
 from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import build_digest_items
 from mailwyrm.digest import build_digest_bundles
+from mailwyrm.labels import build_label_plans
 from mailwyrm.models import MACHINE_TYPES
 from mailwyrm.store import MailwyrmState
 
@@ -49,9 +50,9 @@ def build_daily_cockpit_payload(
     all_action_plans = build_action_plans(state, mailbox=mailbox)
     action_plans = all_action_plans if limit is None else all_action_plans[:limit]
     trash_preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
-    all_digest_items = build_digest_items(state)
+    all_digest_items = build_digest_items(state, mailbox=mailbox)
     digest_items = all_digest_items if limit is None else all_digest_items[:limit]
-    digest_bundles = build_digest_bundles(state, limit=limit)
+    digest_bundles = build_digest_bundles(state, limit=limit, mailbox=mailbox)
     attention_lanes = _attention_lanes(state, mailbox=mailbox, limit=limit)
     audit_events = sorted(
         state.label_audit_events,
@@ -353,7 +354,7 @@ def _workflow_controls(
     action_counts = _action_counts(action_plans)
     archive_count = action_counts[ACTION_ARCHIVE_AFTER_DIGEST]
     trash_count = len(trash_preview.plans)
-    label_count = len(action_plans)
+    label_count = len(build_label_plans(state, limit=limit, mailbox=mailbox))
     classify_count = _unclassified_message_count(state, mailbox=mailbox, limit=limit)
     client_secret_arg = _client_secret_arg(client_secret)
 
@@ -365,9 +366,10 @@ def _workflow_controls(
             "status": "Gmail read",
             "count": None,
             "mutates_gmail": False,
-            "description": "Refresh the local index from Gmail for this mailbox scope.",
+            "description": "Refresh the full local index from Gmail for this mailbox scope.",
             "app_action": "sync",
             "action_label": "Sync Gmail",
+            "sync_all": True,
             "primary_command": (
                 "uv run mailwyrm sync"
                 f"{mailbox_arg}{limit_arg}"
@@ -381,9 +383,10 @@ def _workflow_controls(
             "status": "Local only",
             "count": classify_count,
             "mutates_gmail": False,
-            "description": "Classify indexed messages before label or action previews.",
+            "description": "Classify all indexed messages in this mailbox scope.",
             "app_action": "classify",
             "action_label": "Classify",
+            "process_all": True,
             "primary_command": f"uv run mailwyrm classify{mailbox_arg}{limit_arg}",
         },
         {
@@ -407,6 +410,8 @@ def _workflow_controls(
             "count": label_count,
             "mutates_gmail": True,
             "description": "Apply Gmail-visible Mailwyrm labels after reviewing the plan.",
+            "app_action": "labels",
+            "action_label": "Apply labels",
             "preview_command": (
                 "uv run mailwyrm labels preview"
                 f"{mailbox_arg}{limit_arg}"
@@ -425,6 +430,8 @@ def _workflow_controls(
             "count": archive_count,
             "mutates_gmail": True,
             "description": "Archive eligible machine mail that already appeared in a digest.",
+            "app_action": "archive",
+            "action_label": "Archive",
             "preview_command": (
                 "uv run mailwyrm actions preview"
                 f"{mailbox_arg}{limit_arg}"
@@ -447,6 +454,8 @@ def _workflow_controls(
             "count": trash_count,
             "mutates_gmail": True,
             "description": "Move only policy-gated low-risk digest mail to Gmail Trash.",
+            "app_action": "trash",
+            "action_label": "Move to Trash",
             "preview_command": (
                 "uv run mailwyrm actions preview-trash"
                 f"{mailbox_arg}{limit_arg}"
@@ -643,17 +652,22 @@ def _digest_bundle_payload(
     followup_count = sum(
         1 for item in bundle.items if item.message.id in state.followups
     )
+    read_later_count = sum(
+        1 for item in bundle.items if item.message.id in state.read_later
+    )
     return {
         "machine_type": bundle.machine_type,
         "title": bundle.title,
         "count": bundle.count,
         "followup_count": followup_count,
+        "read_later_count": read_later_count,
         "mailbox": mailbox,
         "action": "trash",
         "action_label": f"Got it: trash {bundle.title.lower()}",
         "sender_groups": _digest_sender_groups(
             bundle.items,
             state=state,
+            mailbox=mailbox,
             group_by_sender=_group_digest_category_by_sender(bundle.machine_type),
         ),
     }
@@ -667,6 +681,7 @@ def _digest_sender_groups(
     items,
     *,
     state: MailwyrmState,
+    mailbox: str,
     group_by_sender: bool,
 ) -> list[dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
@@ -689,16 +704,27 @@ def _digest_sender_groups(
                 "count": 0,
                 "message_ids": [],
                 "followup_count": 0,
+                "read_later_count": 0,
                 "subjects": [],
+                "messages": [],
                 "summaries": [],
-                "gmail_url": _gmail_url(item.message.id),
+                "gmail_url": _gmail_url(item.message.id, mailbox=mailbox),
                 "order": len(groups),
             },
         )
         group["count"] += 1
         group["message_ids"].append(item.message.id)
+        group["messages"].append(
+            {
+                    "message_id": item.message.id,
+                    "subject": _header(item.message, "Subject", "(no subject)"),
+                    "gmail_url": _gmail_url(item.message.id, mailbox=mailbox),
+                }
+        )
         if item.message.id in state.followups:
             group["followup_count"] += 1
+        if item.message.id in state.read_later:
+            group["read_later_count"] += 1
         group["subjects"].append(_header(item.message, "Subject", "(no subject)"))
         summary = _clean_snippet(item.message.body_text or item.message.snippet)
         if summary:

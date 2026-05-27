@@ -225,6 +225,61 @@ class GmailClientTest(unittest.TestCase):
         self.assertIn("includeSpamTrash=true", urls[0])
         self.assertIn("labelIds=TRASH", urls[0])
 
+    def test_list_messages_pages_until_requested_count(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            if len(urls) == 1:
+                return {
+                    "messages": [{"id": "msg-1"}, {"id": "msg-2"}],
+                    "nextPageToken": "next",
+                }
+            return {"messages": [{"id": "msg-3"}]}
+
+        client._request = fake_request
+
+        messages = client.list_messages(max_results=3)
+
+        self.assertEqual([message["id"] for message in messages], ["msg-1", "msg-2", "msg-3"])
+        self.assertIn("maxResults=3", urls[0])
+        self.assertIn("maxResults=1", urls[1])
+        self.assertIn("pageToken=next", urls[1])
+
+    def test_list_messages_can_fetch_all_pages(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        urls = []
+
+        def fake_request(url, **kwargs):
+            urls.append(url)
+            if len(urls) == 1:
+                return {
+                    "messages": [{"id": "msg-1"}],
+                    "nextPageToken": "next",
+                }
+            return {"messages": [{"id": "msg-2"}]}
+
+        client._request = fake_request
+
+        messages = client.list_messages(max_results=None)
+
+        self.assertEqual([message["id"] for message in messages], ["msg-1", "msg-2"])
+        self.assertIn("maxResults=500", urls[0])
+        self.assertIn("maxResults=500", urls[1])
+
     def test_get_message_full_requests_full_format(self) -> None:
         client = GmailClient(
             GmailToken(

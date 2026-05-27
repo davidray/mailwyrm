@@ -4,12 +4,17 @@ const state = {
   auditLimit: 10,
   activeTab: "people",
   refreshTimer: null,
+  completeTimers: new Map(),
 };
 
+const COMPLETE_UNDO_DELAY_MS = 5000;
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
 const appActionEndpoints = {
   sync: "/api/gmail-sync",
   classify: "/api/local-classify",
+  labels: "/api/gmail-labels/apply",
+  archive: "/api/archive-after-digest",
+  trash: "/api/trash-after-digest",
 };
 const reviewMachineTypes = [
   ["marketing", "Marketing"],
@@ -29,6 +34,7 @@ const els = {
   metrics: document.querySelector("#metrics"),
   humanCount: document.querySelector("#human-count"),
   humanLane: document.querySelector("#human-lane"),
+  reviewTabCount: document.querySelector("#review-tab-count"),
   reviewCount: document.querySelector("#review-count"),
   reviewLane: document.querySelector("#review-lane"),
   digestCount: document.querySelector("#digest-count"),
@@ -151,9 +157,11 @@ async function loadCockpit(options = {}) {
         });
       });
     }
+    return payload;
   } catch (error) {
     renderError(error.message || "Unable to load cockpit data.");
   }
+  return null;
 }
 
 async function parseJsonResponse(response) {
@@ -182,11 +190,22 @@ function renderCockpit(payload) {
     prominentSender: true,
     reviewControls: true,
   });
+  renderReviewTabCount(payload.lanes.needs_review);
   renderDigest(payload.digest);
   renderActions(payload.mailbox_actions);
   renderTrash(payload.trash_gate);
   renderAudit(payload.audit);
   renderWorkflows(payload.workflows);
+}
+
+function renderReviewTabCount(lane) {
+  const count = lane.total_items || 0;
+  els.reviewTabCount.hidden = false;
+  els.reviewTabCount.textContent = String(count);
+  els.reviewTabCount.setAttribute(
+    "aria-label",
+    `${count} review message${count === 1 ? "" : "s"}`
+  );
 }
 
 function renderProfile(account) {
@@ -327,6 +346,7 @@ function personGroupCard(person, options) {
           showSnippet: true,
           showReason: options.showReason || false,
           completeConversation: true,
+          reassignToDigest: true,
           compact: true,
           showSender: false,
           mailbox: state.mailbox,
@@ -369,7 +389,7 @@ function machineBundleCard(bundle) {
   const gotIt = div("button", { type: "button", class: "bundle-got-it" }, "Got it");
   gotIt.addEventListener("click", () => clearMachineBundle(bundle, gotIt));
 
-  return div("article", { class: "machine-bundle" }, [
+  return div("article", { class: "machine-bundle", "data-machine-type": bundle.machine_type }, [
     div("div", { class: "bundle-header" }, [
       div("div", {}, [
         div("h3", {}, bundle.title),
@@ -378,33 +398,207 @@ function machineBundleCard(bundle) {
       gotIt,
     ]),
     div(
-      "ul",
+      "div",
       { class: "headline-list" },
-      bundle.sender_groups.map((group) =>
-        div("li", {}, [
-          div("div", { class: "digest-row-heading" }, [
-            div("div", {}, [
-              div("strong", {}, group.sender_name || group.sender),
-              group.followup_count
-                ? div(
-                    "div",
-                    { class: "followup-identity" },
-                    `${group.followup_count} follow-up needed`
-                  )
-                : "",
-            ]),
-            div("div", { class: "digest-row-actions" }, [
-              pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
-              followupButton(group),
-            ]),
-          ]),
-          group.subject ? div("p", { class: "digest-subject" }, group.subject) : "",
-          group.sender_email ? div("p", { class: "meta" }, group.sender_email) : "",
-          group.summary ? div("p", { class: "meta" }, group.summary) : "",
-        ])
-      )
+      bundle.sender_groups.map((group) => digestRowCard(group, bundle))
     ),
   ]);
+}
+
+function digestRowCard(group, bundle) {
+  return div("article", { class: "item digest-row" }, [
+    div("div", { class: "item-header" }, [
+      div("div", {}, [
+        digestRowTitle(group),
+        group.sender_email ? div("div", { class: "meta" }, group.sender_email) : "",
+      ]),
+      div("div", { class: "digest-row-actions" }, [
+        pill(`${group.count} message${group.count === 1 ? "" : "s"}`),
+        followupButton(group),
+        readLaterButton(group),
+      ]),
+    ]),
+    group.summary ? div("p", { class: "snippet" }, group.summary) : "",
+    digestRowControls(group, bundle),
+  ]);
+}
+
+function digestRowTitle(group) {
+  if (group.count === 1 && group.messages && group.messages.length === 1) {
+    return subjectButton(
+      {
+        message_id: group.messages[0].message_id,
+        subject: group.subject || group.messages[0].subject || group.sender_name,
+      },
+      state.mailbox
+    );
+  }
+  return div("div", { class: "message-link digest-group-title" }, group.sender_name || group.sender);
+}
+
+function digestRowControls(group, bundle) {
+  return div("div", { class: "item-actions digest-row-controls" }, [
+    digestCategorySelect(group, bundle.machine_type),
+    ...digestMessageControls(group),
+  ]);
+}
+
+function digestCategorySelect(group, currentMachineType) {
+  const select = div(
+    "select",
+    {
+      class: "digest-category-select",
+      "aria-label": "Move digest row to category",
+      title: "Move this digest row to another category.",
+      "data-current-value": currentMachineType,
+    },
+    reviewMachineTypes.map(([type, label]) =>
+      div("option", { value: type }, label)
+    )
+  );
+  select.value = currentMachineType;
+  select.addEventListener("change", () =>
+    updateDigestCategory(group.message_ids, select.value, select)
+  );
+  return select;
+}
+
+function digestMessageControls(group) {
+  const messages = group.messages || [];
+  if (messages.length === 1) {
+    const message = messages[0];
+    return [
+      link(message.gmail_url, "Open in Gmail", "secondary-link"),
+    ];
+  }
+  if (messages.length > 1) {
+    return [
+      div("details", { class: "digest-message-list" }, [
+        div("summary", {}, `Read ${messages.length} emails`),
+        div(
+          "div",
+          { class: "digest-message-items" },
+          messages.map((message) =>
+            div("div", { class: "digest-message-item" }, [
+              div("span", {}, message.subject),
+              div("div", { class: "digest-message-actions" }, [
+                link(message.gmail_url, "Open in Gmail", "secondary-link"),
+              ]),
+            ])
+          )
+        ),
+      ]),
+    ];
+  }
+  return [];
+}
+
+async function updateDigestCategory(messageIds, machineType, select) {
+  const previousValue = select.dataset.currentValue || select.value;
+  if (machineType === previousValue) {
+    return;
+  }
+  select.disabled = true;
+  try {
+    const response = await fetch("/api/digest-category", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        machine_type: machineType,
+        reason: "User moved this digest row to another category.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      select.value = previousValue;
+      renderBundleFeedback(select, {
+        title: "Category failed",
+        message: payload.error || "Unable to update digest category.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    select.value = previousValue;
+    renderBundleFeedback(select, {
+      title: "Category failed",
+      message: error.message || "Unable to update digest category.",
+      tone: "error",
+    });
+  } finally {
+    select.disabled = false;
+  }
+}
+
+function digestReassignmentSelect(item) {
+  const select = div(
+    "select",
+    {
+      class: "digest-category-select human-reassign-select",
+      "aria-label": "Move conversation to digest category",
+      title: "Move this conversation out of Real People and into a digest category.",
+      "data-current-value": "",
+    },
+    [
+      div("option", { value: "" }, "Move to digest..."),
+      ...reviewMachineTypes.map(([type, label]) =>
+        div("option", { value: type }, label)
+      ),
+    ]
+  );
+  select.value = "";
+  select.addEventListener("change", () =>
+    reassignRealPeopleItemToDigest(item, select.value, select)
+  );
+  return select;
+}
+
+async function reassignRealPeopleItemToDigest(item, machineType, select) {
+  if (!machineType) {
+    return;
+  }
+  const messageIds =
+    item.message_ids && item.message_ids.length ? item.message_ids : [item.message_id];
+  select.disabled = true;
+  try {
+    const response = await fetch("/api/digest-category", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        machine_type: machineType,
+        reason: "User moved this Real People conversation to a digest category.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      select.value = "";
+      renderContextFeedback(select, {
+        title: "Category failed",
+        message: payload.error || "Unable to move this conversation.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    select.value = "";
+    renderContextFeedback(select, {
+      title: "Category failed",
+      message: error.message || "Unable to move this conversation.",
+      tone: "error",
+    });
+  } finally {
+    select.disabled = false;
+  }
 }
 
 function followupButton(group) {
@@ -413,12 +607,13 @@ function followupButton(group) {
     "button",
     {
       type: "button",
-      class: `followup-toggle${group.followup_count ? " active" : ""}`,
+      class: `icon-toggle followup-toggle${group.followup_count ? " active" : ""}`,
+      "aria-label": isFollowup ? "Remove follow-up" : "Mark for follow-up",
       title: isFollowup
         ? "Remove follow-up from these digest messages."
         : "Keep these digest messages out of Got it cleanup.",
     },
-    isFollowup ? "Remove follow-up" : "Follow up"
+    isFollowup ? "☑" : "☐"
   );
   button.addEventListener("click", () =>
     setDigestFollowup(group.message_ids, !isFollowup, button)
@@ -426,10 +621,30 @@ function followupButton(group) {
   return button;
 }
 
+function readLaterButton(group) {
+  const isReadLater = group.read_later_count === group.count;
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: `icon-toggle read-later-toggle${group.read_later_count ? " active" : ""}`,
+      "aria-label": isReadLater ? "Remove read marker" : "Mark to read",
+      title: isReadLater
+        ? "Remove read marker from these digest messages."
+        : "Keep these digest messages around to read later.",
+    },
+    isReadLater ? "♥" : "♡"
+  );
+  button.addEventListener("click", () =>
+    setDigestReadLater(group.message_ids, !isReadLater, button)
+  );
+  return button;
+}
+
 async function setDigestFollowup(messageIds, followup, button) {
   const previousText = button.textContent;
   button.disabled = true;
-  button.textContent = followup ? "Marking" : "Removing";
+  button.classList.add("saving");
   try {
     const response = await fetch("/api/followup", {
       method: "POST",
@@ -445,20 +660,70 @@ async function setDigestFollowup(messageIds, followup, button) {
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to update follow-up.");
+      renderBundleFeedback(button, {
+        title: "Follow-up failed",
+        message: payload.error || "Unable to update follow-up.",
+        tone: "error",
+      });
       return;
     }
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to update follow-up.");
+    renderBundleFeedback(button, {
+      title: "Follow-up failed",
+      message: error.message || "Unable to update follow-up.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
+    button.classList.remove("saving");
+    button.textContent = previousText;
+  }
+}
+
+async function setDigestReadLater(messageIds, readLater, button) {
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.classList.add("saving");
+  try {
+    const response = await fetch("/api/read-later", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        read_later: readLater,
+        reason: "User marked this digest row to read.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderBundleFeedback(button, {
+        title: "Read marker failed",
+        message: payload.error || "Unable to update read marker.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderBundleFeedback(button, {
+      title: "Read marker failed",
+      message: error.message || "Unable to update read marker.",
+      tone: "error",
+    });
+  } finally {
+    button.disabled = false;
+    button.classList.remove("saving");
     button.textContent = previousText;
   }
 }
 
 async function clearMachineBundle(bundle, button) {
   const previousText = button.textContent;
+  clearBundleFeedback(button);
   button.disabled = true;
   button.textContent = "Clearing";
   try {
@@ -475,17 +740,62 @@ async function clearMachineBundle(bundle, button) {
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to clear machine bundle.");
+      renderBundleFeedback(button, {
+        title: "Got it failed",
+        message: payload.error || "Unable to clear machine bundle.",
+        tone: "error",
+      });
       return;
     }
-    renderLocalMutationResult(payload);
     await loadCockpit({ preserveScroll: true });
+    if (payload.applied === 0) {
+      renderBundleFeedbackForType(payload.machine_type, {
+        title: payload.title,
+        message: payload.message,
+        tone: "success",
+      });
+    }
   } catch (error) {
-    renderPreviewError(error.message || "Unable to clear machine bundle.");
+    renderBundleFeedback(button, {
+      title: "Got it failed",
+      message: error.message || "Unable to clear machine bundle.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
   }
+}
+
+function clearBundleFeedback(button) {
+  button.closest(".machine-bundle")?.querySelector(".bundle-feedback")?.remove();
+}
+
+function renderBundleFeedbackForType(machineType, options) {
+  const bundleCard = els.digest.querySelector(
+    `[data-machine-type="${CSS.escape(machineType)}"]`
+  );
+  if (bundleCard) {
+    renderBundleFeedback(bundleCard, options);
+  }
+}
+
+function renderBundleFeedback(target, { title, message, tone }) {
+  const bundleCard = target.closest ? target.closest(".machine-bundle") : target;
+  if (!bundleCard) {
+    return;
+  }
+  bundleCard.querySelector(".bundle-feedback")?.remove();
+  const feedback = div("div", { class: `bundle-feedback ${tone}` }, [
+    div("strong", {}, title),
+    div("p", {}, message),
+  ]);
+  const header = bundleCard.querySelector(".bundle-header");
+  if (header) {
+    header.insertAdjacentElement("afterend", feedback);
+    return;
+  }
+  bundleCard.prepend(feedback);
 }
 
 function renderActions(actions) {
@@ -558,8 +868,8 @@ function messageCard(item, options) {
       : "",
     options.reviewControls ? inlineReviewControls(item) : "",
     div("div", { class: "item-actions" }, [
+      options.reassignToDigest ? digestReassignmentSelect(item) : "",
       options.completeConversation ? completeConversationButton(item) : "",
-      detailButton(item, options.mailbox || state.mailbox),
       link(item.gmail_url, "Open in Gmail", "secondary-link"),
     ]),
   ]);
@@ -592,14 +902,54 @@ function completeConversationButton(item) {
     },
     "Complete"
   );
-  button.addEventListener("click", () => completeConversation(item, button));
+  button.addEventListener("click", () => scheduleCompleteConversation(item, button));
   return button;
+}
+
+function scheduleCompleteConversation(item, button) {
+  const pendingKey = item.thread_id || item.message_id;
+  if (state.completeTimers.has(pendingKey)) {
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Completing in 5s";
+  const undo = div(
+    "button",
+    {
+      type: "button",
+      class: "undo-complete",
+      title: "Cancel completing this conversation.",
+    },
+    "Undo"
+  );
+  button.insertAdjacentElement("afterend", undo);
+
+  const timer = window.setTimeout(() => {
+    state.completeTimers.delete(pendingKey);
+    undo.remove();
+    completeConversation(item, button);
+  }, COMPLETE_UNDO_DELAY_MS);
+
+  state.completeTimers.set(pendingKey, { timer, button, undo });
+  undo.addEventListener("click", () => undoCompleteConversation(pendingKey));
+}
+
+function undoCompleteConversation(pendingKey) {
+  const pending = state.completeTimers.get(pendingKey);
+  if (!pending) {
+    return;
+  }
+  window.clearTimeout(pending.timer);
+  state.completeTimers.delete(pendingKey);
+  pending.undo.remove();
+  pending.button.disabled = false;
+  pending.button.textContent = "Complete";
 }
 
 async function completeConversation(item, button) {
   const previousText = button.textContent;
   button.disabled = true;
-  button.textContent = "Completing";
+  button.textContent = "Archiving";
   try {
     const response = await fetch("/api/conversation-complete", {
       method: "POST",
@@ -614,15 +964,23 @@ async function completeConversation(item, button) {
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to complete conversation.");
+      renderContextFeedback(button, {
+        title: "Complete failed",
+        message: payload.error || "Unable to complete conversation.",
+        tone: "error",
+      });
       return;
     }
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to complete conversation.");
+    renderContextFeedback(button, {
+      title: "Complete failed",
+      message: error.message || "Unable to complete conversation.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
-    button.textContent = previousText;
+    button.textContent = previousText === "Completing in 5s" ? "Complete" : previousText;
   }
 }
 
@@ -677,12 +1035,6 @@ function machineTypeLabel(type) {
 
 function subjectButton(item, mailbox) {
   const button = div("button", { type: "button", class: "message-link" }, item.subject);
-  button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
-  return button;
-}
-
-function detailButton(item, mailbox) {
-  const button = div("button", { type: "button", class: "view-detail" }, "Details");
   button.addEventListener("click", () => loadMessageDetail(item.message_id, mailbox));
   return button;
 }
@@ -881,22 +1233,58 @@ async function saveReviewResolution({
     });
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to save review resolution.");
+      renderContextFeedback(button, {
+        title: "Resolution failed",
+        message: payload.error || "Unable to save review resolution.",
+        tone: "error",
+      });
       return;
     }
     if (renderDetail) {
       renderMessageDetail(payload.detail);
     }
     if (showResult) {
-      renderLocalMutationResult(payload);
+      renderContextFeedback(button, {
+        title: payload.title,
+        message: payload.message,
+        tone: "success",
+      });
     }
     await loadCockpit({ preserveScroll: true });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to save review resolution.");
+    renderContextFeedback(button, {
+      title: "Resolution failed",
+      message: error.message || "Unable to save review resolution.",
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
   }
+}
+
+function renderContextFeedback(target, { title, message, tone }) {
+  const container =
+    target.closest(".review-resolution") ||
+    target.closest(".item") ||
+    target.closest(".machine-bundle");
+  if (!container) {
+    return;
+  }
+  container.querySelector(".context-feedback")?.remove();
+  const feedback = div("div", { class: `context-feedback ${tone}` }, [
+    div("strong", {}, title),
+    div("p", {}, message),
+  ]);
+  const controls =
+    target.closest(".resolution-controls") ||
+    target.closest(".inline-review-controls") ||
+    target.closest(".item-actions");
+  if (controls) {
+    controls.insertAdjacentElement("afterend", feedback);
+    return;
+  }
+  container.append(feedback);
 }
 
 function auditSection(events) {
@@ -1007,13 +1395,21 @@ function appActionButton(workflow) {
 }
 
 async function runAppAction(workflow, button) {
+  if (workflow.mutates_gmail && !confirmGmailMutation(workflow)) {
+    return;
+  }
   const params = new URLSearchParams({
     mailbox: state.mailbox,
-    limit: String(state.limit),
   });
+  if (workflow.sync_all || workflow.process_all) {
+    params.set("all", "true");
+  } else {
+    params.set("limit", String(state.limit));
+  }
   const endpoint = appActionEndpoints[workflowAppAction(workflow)];
   const previousText = button.textContent;
   clearWorkflowFeedback(button);
+  els.previewPanel.hidden = true;
   button.disabled = true;
   button.textContent = "Running";
   try {
@@ -1050,6 +1446,13 @@ async function runAppAction(workflow, button) {
   }
 }
 
+function confirmGmailMutation(workflow) {
+  return window.confirm(
+    `${workflow.title} will update Gmail for the selected mailbox scope.\n\n` +
+      "Review the preview first if you are not sure. Continue?"
+  );
+}
+
 function previewButton(workflow) {
   const button = div("button", { type: "button", class: "preview-workflow" }, "View preview");
   button.addEventListener("click", () => loadWorkflowPreview(workflow.id, button));
@@ -1063,18 +1466,32 @@ async function loadWorkflowPreview(workflowId, button) {
     limit: String(state.limit),
   });
   const previousText = button.textContent;
+  clearWorkflowFeedback(button);
   button.disabled = true;
   button.textContent = "Loading";
   try {
     const response = await fetch(`/api/workflow-preview?${params}`);
     const payload = await parseJsonResponse(response);
     if (!response.ok) {
-      renderPreviewError(payload.error || "Unable to render preview.");
+      renderWorkflowFeedback(button, {
+        title: "Preview failed",
+        lines: [payload.error || "Unable to render preview."],
+        tone: "error",
+      });
       return;
     }
-    renderWorkflowPreview(payload);
+    renderWorkflowFeedback(button, {
+      title: payload.title,
+      lines: ["Preview only. Gmail was not modified."],
+      report: payload.report,
+      tone: "preview",
+    });
   } catch (error) {
-    renderPreviewError(error.message || "Unable to render preview.");
+    renderWorkflowFeedback(button, {
+      title: "Preview failed",
+      lines: [error.message || "Unable to render preview."],
+      tone: "error",
+    });
   } finally {
     button.disabled = false;
     button.textContent = previousText;
@@ -1088,6 +1505,17 @@ function renderWorkflowPreview(payload) {
 }
 
 function actionReportLines(payload) {
+  if (payload.report) {
+    return [
+      payload.message,
+      "",
+      ...payload.report.split("\n"),
+      "",
+      payload.mutates_gmail
+        ? payload.gmail_refresh_hint || "Gmail was modified."
+        : "Gmail was not modified.",
+    ];
+  }
   if (payload.report_lines && payload.report_lines.length) {
     return [payload.message, "", ...payload.report_lines];
   }
@@ -1115,16 +1543,20 @@ function renderWorkflowFeedbackForId(workflowId, options) {
   renderWorkflowFeedback(card, options);
 }
 
-function renderWorkflowFeedback(target, { title, lines, tone }) {
+function renderWorkflowFeedback(target, { title, lines, report, tone }) {
   const card = target.closest ? target.closest(".workflow") : target;
   if (!card) {
     return;
   }
-  card.querySelector(".workflow-feedback")?.remove();
-  const feedback = div("div", { class: `workflow-feedback ${tone}` }, [
+  const content = [
     div("strong", {}, title),
     ...lines.map((line) => div("p", {}, line)),
-  ]);
+  ];
+  if (report) {
+    content.push(div("pre", { class: "workflow-report" }, report));
+  }
+  card.querySelector(".workflow-feedback")?.remove();
+  const feedback = div("div", { class: `workflow-feedback ${tone}` }, content);
   const actions = card.querySelector(".workflow-actions");
   if (actions) {
     actions.insertAdjacentElement("afterend", feedback);

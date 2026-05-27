@@ -23,12 +23,12 @@ def sync_mailbox_from_gmail(
     client,
     state: MailwyrmState,
     *,
-    limit: int,
+    limit: int | None,
     mailbox: str,
     include_body: bool = False,
     body_char_limit: int = 4000,
 ) -> SyncStats:
-    if limit < 0:
+    if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
     if body_char_limit < 0:
         raise ValueError("body_char_limit must be non-negative")

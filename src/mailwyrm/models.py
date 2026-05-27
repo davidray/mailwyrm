@@ -357,6 +357,24 @@ class FollowUpMarker:
 
 
 @dataclass(frozen=True)
+class ReadLaterMarker:
+    message_id: str
+    reason: str
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ReadLaterMarker":
+        return cls(
+            message_id=str(data["message_id"]),
+            reason=str(data.get("reason", "")),
+            created_at=str(data["created_at"]),
+        )
+
+
+@dataclass(frozen=True)
 class AutomationPolicy:
     archive_after_digest_enabled: bool = True
     trash_after_digest_enabled: bool = False

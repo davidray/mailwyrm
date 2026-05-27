@@ -15,6 +15,7 @@ from mailwyrm.models import (
     GmailToken,
     LabelAuditEvent,
     MessageRecord,
+    ReadLaterMarker,
 )
 
 
@@ -27,6 +28,7 @@ class MailwyrmState:
     classifications: dict[str, ClassificationRecord] = field(default_factory=dict)
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
     followups: dict[str, FollowUpMarker] = field(default_factory=dict)
+    read_later: dict[str, ReadLaterMarker] = field(default_factory=dict)
     digest_audit_events: list[DigestAuditEvent] = field(default_factory=list)
     label_audit_events: list[LabelAuditEvent] = field(default_factory=list)
     automation_policy: AutomationPolicy = field(default_factory=AutomationPolicy)
@@ -49,6 +51,10 @@ class MailwyrmState:
             message_id: FollowUpMarker.from_dict(marker)
             for message_id, marker in data.get("followups", {}).items()
         }
+        read_later = {
+            message_id: ReadLaterMarker.from_dict(marker)
+            for message_id, marker in data.get("read_later", {}).items()
+        }
         label_audit_events = [
             LabelAuditEvent.from_dict(event)
             for event in data.get("label_audit_events", [])
@@ -68,6 +74,7 @@ class MailwyrmState:
             classifications=classifications,
             corrections=corrections,
             followups=followups,
+            read_later=read_later,
             digest_audit_events=digest_audit_events,
             label_audit_events=label_audit_events,
             automation_policy=automation_policy,
@@ -93,6 +100,10 @@ class MailwyrmState:
             "followups": {
                 message_id: marker.to_dict()
                 for message_id, marker in sorted(self.followups.items())
+            },
+            "read_later": {
+                message_id: marker.to_dict()
+                for message_id, marker in sorted(self.read_later.items())
             },
             "digest_audit_events": [
                 event.to_dict() for event in self.digest_audit_events

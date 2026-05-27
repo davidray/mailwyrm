@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from mailwyrm.digest import (
     build_digest_bundles,
@@ -119,6 +120,33 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(news.title, "News")
         self.assertEqual(news.message_ids, ["msg-1", "msg-3"])
         self.assertEqual(news.count, 2)
+
+    def test_build_digest_bundles_can_scope_to_inbox(self) -> None:
+        trashed = replace(message("msg-2", "Already cleared"), label_ids=["TRASH"])
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Still in inbox"),
+                "msg-2": trashed,
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="marketing",
+                ),
+                "msg-2": classification(
+                    "msg-2",
+                    category="machine",
+                    machine_type="marketing",
+                ),
+            },
+        )
+
+        inbox_bundles = build_digest_bundles(state, mailbox="inbox")
+        trash_bundles = build_digest_bundles(state, mailbox="trash")
+
+        self.assertEqual(inbox_bundles[0].message_ids, ["msg-1"])
+        self.assertEqual(trash_bundles[0].message_ids, ["msg-2"])
 
     def test_digest_excludes_human_messages(self) -> None:
         state = MailwyrmState(

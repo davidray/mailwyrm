@@ -8,6 +8,7 @@ from mailwyrm.models import (
     ClassificationRecord,
     DigestAuditEvent,
     FollowUpMarker,
+    ReadLaterMarker,
     LabelAuditEvent,
     MessageRecord,
 )
@@ -226,6 +227,7 @@ class CockpitTest(unittest.TestCase):
         )
         self.assertEqual(payload["workflows"][0]["app_action"], "sync")
         self.assertEqual(payload["workflows"][0]["action_label"], "Sync Gmail")
+        self.assertTrue(payload["workflows"][0]["sync_all"])
         self.assertEqual(payload["workflows"][-1]["status"], "Policy enabled")
         self.assertEqual(payload["workflows"][-1]["count"], 1)
         self.assertTrue(payload["workflows"][-1]["mutates_gmail"])
@@ -233,10 +235,20 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(classify_workflow["count"], 1)
         self.assertEqual(classify_workflow["app_action"], "classify")
         self.assertEqual(classify_workflow["action_label"], "Classify")
+        self.assertTrue(classify_workflow["process_all"])
         self.assertIn(
             "classify --mailbox inbox --limit 1",
             classify_workflow["primary_command"],
         )
+        labels_workflow = payload["workflows"][3]
+        self.assertEqual(labels_workflow["app_action"], "labels")
+        self.assertEqual(labels_workflow["action_label"], "Apply labels")
+        archive_workflow = payload["workflows"][4]
+        self.assertEqual(archive_workflow["app_action"], "archive")
+        self.assertEqual(archive_workflow["action_label"], "Archive")
+        trash_workflow = payload["workflows"][5]
+        self.assertEqual(trash_workflow["app_action"], "trash")
+        self.assertEqual(trash_workflow["action_label"], "Move to Trash")
 
     def test_review_resolution_moves_message_from_review_to_digest_bundle(self) -> None:
         state = MailwyrmState(
@@ -321,6 +333,13 @@ class CockpitTest(unittest.TestCase):
                     created_at="2026-05-25T00:00:00+00:00",
                 )
             },
+            read_later={
+                "msg-1": ReadLaterMarker(
+                    message_id="msg-1",
+                    reason="Worth reading.",
+                    created_at="2026-05-25T00:00:00+00:00",
+                )
+            },
         )
 
         payload = build_daily_cockpit_payload(state, mailbox="inbox")
@@ -330,7 +349,23 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(groups[0]["sender_email"], "sender@example.com")
         self.assertEqual(groups[0]["count"], 2)
         self.assertEqual(groups[0]["message_ids"], ["msg-1", "msg-2"])
+        self.assertEqual(
+            groups[0]["messages"],
+            [
+                {
+                    "message_id": "msg-1",
+                    "subject": "Copilot finished one",
+                    "gmail_url": "https://mail.google.com/mail/u/0/#inbox/msg-1",
+                },
+                {
+                    "message_id": "msg-2",
+                    "subject": "Copilot finished two",
+                    "gmail_url": "https://mail.google.com/mail/u/0/#inbox/msg-2",
+                },
+            ],
+        )
         self.assertEqual(groups[0]["followup_count"], 1)
+        self.assertEqual(groups[0]["read_later_count"], 1)
         self.assertEqual(groups[0]["subject"], "")
         self.assertEqual(
             groups[0]["summary"],

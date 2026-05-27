@@ -1,6 +1,11 @@
 import unittest
 
-from mailwyrm.followups import message_needs_followup, set_followup
+from mailwyrm.followups import (
+    message_marked_read_later,
+    message_needs_followup,
+    set_followup,
+    set_read_later,
+)
 from mailwyrm.models import MessageRecord
 from mailwyrm.store import MailwyrmState
 
@@ -40,6 +45,25 @@ class FollowUpTest(unittest.TestCase):
     def test_rejects_unknown_message(self) -> None:
         with self.assertRaises(ValueError):
             set_followup(MailwyrmState(), message_ids=["missing"], followup=True)
+
+    def test_sets_and_clears_read_later_marker(self) -> None:
+        state = MailwyrmState(messages={"msg-1": message("msg-1")})
+
+        marked = set_read_later(
+            state,
+            message_ids=["msg-1"],
+            read_later=True,
+            reason="Worth reading.",
+        )
+
+        self.assertEqual(marked["changed"], 1)
+        self.assertTrue(message_marked_read_later(state, "msg-1"))
+        self.assertEqual(state.read_later["msg-1"].reason, "Worth reading.")
+
+        cleared = set_read_later(state, message_ids=["msg-1"], read_later=False)
+
+        self.assertEqual(cleared["changed"], 1)
+        self.assertFalse(message_marked_read_later(state, "msg-1"))
 
 
 if __name__ == "__main__":

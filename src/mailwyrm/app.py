@@ -13,6 +13,8 @@ from urllib.parse import parse_qs, urlparse
 from mailwyrm.actions import (
     ACTION_TRASH_AFTER_DIGEST,
     ActionPlan,
+    apply_archive_action_plans,
+    apply_trash_action_preview,
     build_action_plans,
     build_trash_preview,
     complete_conversation,
@@ -34,9 +36,9 @@ from mailwyrm.corrections import (
 )
 from mailwyrm.daily import render_daily_preview
 from mailwyrm.digest import build_digest_bundles, mark_digest_items
-from mailwyrm.followups import set_followup
+from mailwyrm.followups import set_followup, set_read_later
 from mailwyrm.gmail import GmailApiError, GmailClient
-from mailwyrm.labels import build_label_plans, render_label_preview
+from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_preview
 from mailwyrm.models import GMAIL_MODIFY_SCOPE
 from mailwyrm.oauth import OAuthError, refresh_token, token_is_expired
 from mailwyrm.store import MailwyrmState, read_state, read_token, write_state, write_token
@@ -134,6 +136,15 @@ def _handler(
             if parsed_url.path == "/api/gmail-sync":
                 self._send_gmail_sync(parsed_url.query)
                 return
+            if parsed_url.path == "/api/gmail-labels/apply":
+                self._send_gmail_labels_apply(parsed_url.query)
+                return
+            if parsed_url.path == "/api/archive-after-digest":
+                self._send_archive_after_digest(parsed_url.query)
+                return
+            if parsed_url.path == "/api/trash-after-digest":
+                self._send_trash_after_digest(parsed_url.query)
+                return
             if parsed_url.path == "/api/review-resolution":
                 self._send_review_resolution()
                 return
@@ -142,6 +153,12 @@ def _handler(
                 return
             if parsed_url.path == "/api/followup":
                 self._send_followup()
+                return
+            if parsed_url.path == "/api/read-later":
+                self._send_read_later()
+                return
+            if parsed_url.path == "/api/digest-category":
+                self._send_digest_category()
                 return
             if parsed_url.path == "/api/conversation-complete":
                 self._send_conversation_complete()
@@ -192,7 +209,11 @@ def _handler(
 
             params = parse_qs(query)
             try:
-                request_limit = _query_int(params, "limit", limit)
+                request_limit = (
+                    None
+                    if _query_bool(params, "all")
+                    else _query_int(params, "limit", limit)
+                )
                 request_mailbox = _query_mailbox(params, mailbox)
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
@@ -218,7 +239,11 @@ def _handler(
 
             params = parse_qs(query)
             try:
-                request_limit = _query_int(params, "limit", limit)
+                request_limit = (
+                    None
+                    if _query_bool(params, "all")
+                    else _query_int(params, "limit", limit)
+                )
                 request_mailbox = _query_mailbox(params, mailbox)
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
@@ -248,6 +273,141 @@ def _handler(
                     {"error": f"unexpected Gmail sync error: {error}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
+                return
+
+            write_state(state_file, state)
+            self._send_json(payload)
+
+        def _send_gmail_labels_apply(self, query: str) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+            if client_secret is None:
+                self._send_json(
+                    {"error": "client secret is required before Gmail can be mutated"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+            params = parse_qs(query)
+            try:
+                request_limit = _query_int(params, "limit", limit)
+                request_mailbox = _query_mailbox(params, mailbox)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_modify_client(client_secret)
+                payload = apply_gmail_labels(
+                    client,
+                    state,
+                    limit=request_limit,
+                    mailbox=request_mailbox,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            except OAuthError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(payload)
+
+        def _send_archive_after_digest(self, query: str) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+            if client_secret is None:
+                self._send_json(
+                    {"error": "client secret is required before Gmail can be mutated"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+            params = parse_qs(query)
+            try:
+                request_limit = _query_int(params, "limit", limit)
+                request_mailbox = _query_mailbox(params, mailbox)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_modify_client(client_secret)
+                payload = apply_archive_after_digest(
+                    client,
+                    state,
+                    limit=request_limit,
+                    mailbox=request_mailbox,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            except OAuthError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(payload)
+
+        def _send_trash_after_digest(self, query: str) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+            if client_secret is None:
+                self._send_json(
+                    {"error": "client secret is required before Gmail can be mutated"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+            params = parse_qs(query)
+            try:
+                request_limit = _query_int(params, "limit", limit)
+                request_mailbox = _query_mailbox(params, mailbox)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_modify_client(client_secret)
+                payload = apply_trash_after_digest(
+                    client,
+                    state,
+                    limit=request_limit,
+                    mailbox=request_mailbox,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            except OAuthError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
                 return
 
             write_state(state_file, state)
@@ -334,7 +494,8 @@ def _handler(
             state_file = state_path()
             state = read_state(state_file)
             bundles = {
-                bundle.machine_type: bundle for bundle in build_digest_bundles(state)
+                bundle.machine_type: bundle
+                for bundle in build_digest_bundles(state, mailbox=request_mailbox)
             }
             bundle = bundles.get(machine_type)
             if bundle is None:
@@ -370,11 +531,13 @@ def _handler(
                     "message": (
                         f"Moved {result.applied} {bundle.title.lower()} "
                         "message(s) to Gmail Trash. "
-                        f"Kept {result.skipped_followup} follow-up message(s)."
+                        f"Kept {result.skipped_followup} follow-up and "
+                        f"{result.skipped_read_later} read-later message(s)."
                     ),
                     "applied": result.applied,
                     "skipped_already_trashed": result.skipped_already_trashed,
                     "skipped_followup": result.skipped_followup,
+                    "skipped_read_later": result.skipped_read_later,
                     "gmail_refresh_hint": (
                         "Gmail may need a browser refresh before the changes are visible."
                     ),
@@ -421,6 +584,95 @@ def _handler(
                         "Marked message(s) for follow-up."
                         if followup
                         else "Removed follow-up marker."
+                    ),
+                    **result,
+                }
+            )
+
+        def _send_digest_category(self) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            try:
+                request = self._read_json_request()
+                message_ids = _request_string_list(request, "message_ids")
+                machine_type = _request_string(request, "machine_type")
+                reason = _optional_request_string(request, "reason") or ""
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                result = change_digest_category(
+                    state,
+                    message_ids=message_ids,
+                    machine_type=machine_type,
+                    reason=reason,
+                )
+            except CorrectionError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(
+                {
+                    "title": "Digest Category Updated",
+                    "mutated_local_state": result["changed"] > 0,
+                    "mutates_gmail": False,
+                    "message": (
+                        f"Moved {result['changed']} message(s) to "
+                        f"{machine_type.replace('_', ' ')}."
+                    ),
+                    **result,
+                }
+            )
+
+        def _send_read_later(self) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            try:
+                request = self._read_json_request()
+                message_ids = _request_string_list(request, "message_ids")
+                read_later = _request_bool(request, "read_later")
+                reason = _optional_request_string(request, "reason") or ""
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                result = set_read_later(
+                    state,
+                    message_ids=message_ids,
+                    read_later=read_later,
+                    reason=reason,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(
+                {
+                    "title": "Read Marker Updated",
+                    "mutated_local_state": result["changed"] > 0,
+                    "mutates_gmail": False,
+                    "message": (
+                        "Marked message(s) to read."
+                        if read_later
+                        else "Removed read marker."
                     ),
                     **result,
                 }
@@ -595,6 +847,15 @@ def _query_mailbox(params: dict[str, list[str]], default: str) -> str:
     if value not in SUPPORTED_MAILBOXES:
         raise ValueError(_mailbox_error())
     return value
+
+
+def _query_bool(params: dict[str, list[str]], name: str) -> bool:
+    raw_value = params.get(name, ["false"])[0].strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError(f"{name} must be true or false")
 
 
 def _query_workflow(params: dict[str, list[str]]) -> str:
@@ -774,7 +1035,7 @@ def sync_gmail_messages(
     client,
     state: MailwyrmState,
     *,
-    limit: int,
+    limit: int | None,
     mailbox: str,
 ) -> dict[str, object]:
     stats = sync_mailbox_from_gmail(
@@ -803,8 +1064,150 @@ def sync_gmail_messages(
             f"Unchanged: {stats.unchanged}",
             f"Label changes: {stats.label_changes}",
             "Stored bounded body text for classification and summaries.",
+            (
+                "Fetched the full selected mailbox scope."
+                if limit is None
+                else f"Fetch limit: {limit}"
+            ),
             "Gmail was not modified.",
         ],
+    }
+
+
+def apply_gmail_labels(
+    client,
+    state: MailwyrmState,
+    *,
+    limit: int | None = 25,
+    mailbox: str = "inbox",
+) -> dict[str, object]:
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+    if mailbox not in SUPPORTED_MAILBOXES:
+        raise ValueError(_mailbox_error())
+
+    plans = build_label_plans(state, limit=limit, mailbox=mailbox)
+    report = render_label_preview(plans)
+    applied = apply_label_plans(client, state, plans)
+    return {
+        "title": "Gmail Labels Applied",
+        "mailbox": mailbox,
+        "limit": limit,
+        "mutated_local_state": applied > 0,
+        "mutates_gmail": applied > 0,
+        "matched_messages": len(plans),
+        "applied": applied,
+        "message": f"Applied Gmail-visible labels to {applied} message(s).",
+        "report": report,
+        "gmail_refresh_hint": (
+            "Gmail may need a browser refresh before the label changes are visible."
+        ),
+    }
+
+
+def apply_archive_after_digest(
+    client,
+    state: MailwyrmState,
+    *,
+    limit: int | None = 25,
+    mailbox: str = "inbox",
+) -> dict[str, object]:
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+    if mailbox not in SUPPORTED_MAILBOXES:
+        raise ValueError(_mailbox_error())
+
+    plans = build_action_plans(state, limit=limit, mailbox=mailbox)
+    report = render_action_preview(plans, mutates_gmail=True)
+    result = apply_archive_action_plans(client, state, plans)
+    return {
+        "title": "Archive Applied",
+        "mailbox": mailbox,
+        "limit": limit,
+        "mutated_local_state": result.applied > 0,
+        "mutates_gmail": result.applied > 0,
+        "matched_messages": len(plans),
+        "applied": result.applied,
+        "skipped_not_digested": result.skipped_not_digested,
+        "skipped_followup": result.skipped_followup,
+        "skipped_read_later": result.skipped_read_later,
+        "message": (
+            f"Archived {result.applied} digest-ready message(s). "
+            f"Skipped {result.skipped_not_digested} before digest and "
+            f"{result.skipped_followup} marked for follow-up, and "
+            f"{result.skipped_read_later} marked to read."
+        ),
+        "report": report,
+        "gmail_refresh_hint": (
+            "Gmail may need a browser refresh before archived messages disappear."
+        ),
+    }
+
+
+def apply_trash_after_digest(
+    client,
+    state: MailwyrmState,
+    *,
+    limit: int | None = 25,
+    mailbox: str = "inbox",
+) -> dict[str, object]:
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+    if mailbox not in SUPPORTED_MAILBOXES:
+        raise ValueError(_mailbox_error())
+
+    preview = build_trash_preview(state, limit=limit, mailbox=mailbox)
+    report = render_trash_preview(preview, mutates_gmail=True)
+    result = apply_trash_action_preview(client, state, preview)
+    return {
+        "title": "Trash Applied",
+        "mailbox": mailbox,
+        "limit": limit,
+        "mutated_local_state": result.applied > 0,
+        "mutates_gmail": result.applied > 0,
+        "matched_messages": len(preview.plans),
+        "applied": result.applied,
+        "skipped_policy_disabled": result.skipped_policy_disabled,
+        "skipped_not_digested": result.skipped_not_digested,
+        "skipped_already_trashed": result.skipped_already_trashed,
+        "skipped_followup": result.skipped_followup,
+        "skipped_read_later": result.skipped_read_later,
+        "message": (
+            f"Moved {result.applied} digest-ready message(s) to Gmail Trash. "
+            f"Skipped {result.skipped_not_digested} before digest, "
+            f"{result.skipped_followup} marked for follow-up, "
+            f"{result.skipped_read_later} marked to read, and "
+            f"{result.skipped_policy_disabled} by disabled policy."
+        ),
+        "report": report,
+        "gmail_refresh_hint": (
+            "Gmail may need a browser refresh before trashed messages disappear."
+        ),
+    }
+
+
+def change_digest_category(
+    state: MailwyrmState,
+    *,
+    message_ids: list[str],
+    machine_type: str,
+    reason: str = "",
+) -> dict[str, object]:
+    changed = 0
+    for message_id in message_ids:
+        correction = add_review_resolution(
+            state,
+            message_id=message_id,
+            resolution="machine",
+            machine_type=machine_type,
+            reason=reason or f"User moved digest item to {machine_type.replace('_', ' ')}.",
+        )
+        if correction.machine_type == machine_type:
+            changed += 1
+    return {
+        "changed": changed,
+        "message_ids": message_ids,
+        "machine_type": machine_type,
     }
 
 
