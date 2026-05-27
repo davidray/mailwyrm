@@ -110,6 +110,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
         self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
         self.assertIn("conversationBadge", static_root.joinpath("app.js").read_text())
+        self.assertIn("digestReassignmentSelect", static_root.joinpath("app.js").read_text())
+        self.assertIn("reassignRealPeopleItemToDigest", static_root.joinpath("app.js").read_text())
         self.assertIn("pillClassName", static_root.joinpath("app.js").read_text())
         self.assertIn("personInitials", static_root.joinpath("app.js").read_text())
         self.assertIn("prominentSender", static_root.joinpath("app.js").read_text())
@@ -122,6 +124,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("profile-popover", static_root.joinpath("app.css").read_text())
         self.assertIn("person-avatar", static_root.joinpath("app.css").read_text())
         self.assertIn("person-group", static_root.joinpath("app.css").read_text())
+        self.assertIn("human-reassign-select", static_root.joinpath("app.css").read_text())
         self.assertIn(".person-group:first-child", static_root.joinpath("app.css").read_text())
         self.assertNotIn("renderCleanup", static_root.joinpath("app.js").read_text())
         self.assertNotIn("cleanupHeading", static_root.joinpath("app.js").read_text())
@@ -541,6 +544,49 @@ class AppTest(unittest.TestCase):
             state.corrections["msg-1"].reason,
             "User moved this digest row to another category.",
         )
+
+    def test_change_digest_category_can_reassign_human_messages(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message("msg-1", "Personal thread"),
+                "msg-2": message("msg-2", "Personal thread"),
+            },
+            classifications={
+                "msg-1": ClassificationRecord(
+                    message_id="msg-1",
+                    category="human",
+                    machine_type=None,
+                    importance="medium",
+                    automation_safety="low",
+                    confidence=0.82,
+                    reason="Looks like personal correspondence.",
+                    suggested_actions=[],
+                    classifier_version="rules-v0",
+                ),
+                "msg-2": ClassificationRecord(
+                    message_id="msg-2",
+                    category="human",
+                    machine_type=None,
+                    importance="medium",
+                    automation_safety="low",
+                    confidence=0.78,
+                    reason="Looks like personal correspondence.",
+                    suggested_actions=[],
+                    classifier_version="rules-v0",
+                ),
+            },
+        )
+
+        result = change_digest_category(
+            state,
+            message_ids=["msg-1", "msg-2"],
+            machine_type="product_community",
+            reason="User moved this Real People conversation to a digest category.",
+        )
+
+        self.assertEqual(result["changed"], 2)
+        self.assertEqual(state.corrections["msg-1"].category, "machine")
+        self.assertEqual(state.corrections["msg-2"].machine_type, "product_community")
 
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))

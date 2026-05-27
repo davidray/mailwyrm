@@ -344,6 +344,7 @@ function personGroupCard(person, options) {
           showSnippet: true,
           showReason: options.showReason || false,
           completeConversation: true,
+          reassignToDigest: true,
           compact: true,
           showSender: false,
           mailbox: state.mailbox,
@@ -527,6 +528,72 @@ async function updateDigestCategory(messageIds, machineType, select) {
     renderBundleFeedback(select, {
       title: "Category failed",
       message: error.message || "Unable to update digest category.",
+      tone: "error",
+    });
+  } finally {
+    select.disabled = false;
+  }
+}
+
+function digestReassignmentSelect(item) {
+  const select = div(
+    "select",
+    {
+      class: "digest-category-select human-reassign-select",
+      "aria-label": "Move conversation to digest category",
+      title: "Move this conversation out of Real People and into a digest category.",
+      "data-current-value": "",
+    },
+    [
+      div("option", { value: "" }, "Move to digest..."),
+      ...reviewMachineTypes.map(([type, label]) =>
+        div("option", { value: type }, label)
+      ),
+    ]
+  );
+  select.value = "";
+  select.addEventListener("change", () =>
+    reassignRealPeopleItemToDigest(item, select.value, select)
+  );
+  return select;
+}
+
+async function reassignRealPeopleItemToDigest(item, machineType, select) {
+  if (!machineType) {
+    return;
+  }
+  const messageIds =
+    item.message_ids && item.message_ids.length ? item.message_ids : [item.message_id];
+  select.disabled = true;
+  try {
+    const response = await fetch("/api/digest-category", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        machine_type: machineType,
+        reason: "User moved this Real People conversation to a digest category.",
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      select.value = "";
+      renderContextFeedback(select, {
+        title: "Category failed",
+        message: payload.error || "Unable to move this conversation.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    select.value = "";
+    renderContextFeedback(select, {
+      title: "Category failed",
+      message: error.message || "Unable to move this conversation.",
       tone: "error",
     });
   } finally {
@@ -801,6 +868,7 @@ function messageCard(item, options) {
       : "",
     options.reviewControls ? inlineReviewControls(item) : "",
     div("div", { class: "item-actions" }, [
+      options.reassignToDigest ? digestReassignmentSelect(item) : "",
       options.completeConversation ? completeConversationButton(item) : "",
       detailButton(item, options.mailbox || state.mailbox),
       link(item.gmail_url, "Open in Gmail", "secondary-link"),

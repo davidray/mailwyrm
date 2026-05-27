@@ -589,6 +589,10 @@ button:disabled {
   font-weight: 700;
 }
 
+.human-reassign-select {
+  min-width: 165px;
+}
+
 .digest-message-list {
   flex-basis: 100%;
   min-width: 0;
