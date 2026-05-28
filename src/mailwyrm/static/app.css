@@ -485,13 +485,21 @@ button:disabled {
 
 .person-messages {
   display: grid;
-  gap: 8px;
+  gap: 0;
 }
 
 .person-messages .item {
   display: block;
-  background: var(--panel-soft);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
+  padding: 0 0 18px;
+}
+
+.person-messages .item + .item {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
 }
 
 .machine-bundle {
