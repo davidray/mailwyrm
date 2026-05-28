@@ -453,10 +453,17 @@ class AppTest(unittest.TestCase):
         self.assertEqual(result["mailbox"], "inbox")
         self.assertEqual(result["matched_messages"], 1)
         self.assertFalse(result["mutates_gmail"])
-        self.assertIn("Synced 1 inbox message", result["message"])
+        self.assertIn("Synced 1 selected inbox message", result["message"])
         self.assertIn("Fetched the full selected mailbox scope.", result["report_lines"])
         self.assertIn("Gmail was not modified.", result["report_lines"])
-        self.assertEqual(client.full_message_ids, ["msg-1"])
+        self.assertIn(
+            "Stored bounded body text and up to 3 message(s) per selected thread for classification and summaries.",
+            result["report_lines"],
+        )
+        self.assertIn("Selected Gmail messages: 1", result["report_lines"])
+        self.assertIn("Stored local message records: 1", result["report_lines"])
+        self.assertEqual(client.thread_ids, ["thread-1"])
+        self.assertEqual(client.full_message_ids, [])
         self.assertIsNone(client.list_kwargs["max_results"])
         self.assertEqual(state.messages["msg-1"].body_text, "Body text")
 
@@ -680,6 +687,7 @@ class AppTest(unittest.TestCase):
 class FakeAppSyncClient:
     def __init__(self) -> None:
         self.full_message_ids: list[str] = []
+        self.thread_ids: list[str] = []
         self.list_kwargs = {}
 
     def profile(self):
@@ -687,12 +695,19 @@ class FakeAppSyncClient:
 
     def list_messages(self, **kwargs):
         self.list_kwargs = kwargs
-        return [{"id": "msg-1"}]
+        return [{"id": "msg-1", "threadId": "thread-1"}]
 
     def get_message_full(self, message_id):
         self.full_message_ids.append(message_id)
+        return self._message(message_id)
+
+    def get_thread_full(self, thread_id):
+        self.thread_ids.append(thread_id)
+        return {"id": thread_id, "messages": [self._message("msg-1")]}
+
+    def _message(self, message_id):
         return {
-            "id": "msg-1",
+            "id": message_id,
             "threadId": "thread-1",
             "historyId": "10",
             "internalDate": "1710000000000",

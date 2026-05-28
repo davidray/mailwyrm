@@ -14,8 +14,7 @@ surface.
    - Keep Gmail as the source of truth when local and remote state disagree.
 
 2. Thread and body depth for summaries.
-   - Expand beyond opt-in bounded single-message body text toward enough thread
-     content to produce useful digest summaries.
+   - Improve generated summary quality beyond deterministic subject/body excerpts.
    - Keep content collection intentionally minimal and tied to user consent.
    - Preserve headers, snippets, and links needed for auditability.
    - Avoid storing unnecessary sensitive content.

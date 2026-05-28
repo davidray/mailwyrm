@@ -727,8 +727,7 @@ def _digest_sender_groups(
             group["read_later_count"] += 1
         group["subjects"].append(_header(item.message, "Subject", "(no subject)"))
         summary = _clean_snippet(item.message.body_text or item.message.snippet)
-        if summary:
-            group["summaries"].append(summary)
+        group["summaries"].append(summary)
 
     sender_groups = sorted(groups.values(), key=lambda group: group["order"])
     for group in sender_groups:
@@ -741,12 +740,26 @@ def _digest_sender_groups(
 
 def _digest_sender_summary(group: dict[str, Any]) -> str:
     subjects = group["subjects"]
+    summaries = group["summaries"]
     if group["count"] == 1:
-        return group["summaries"][0] if group["summaries"] else subjects[0]
-    shown_subjects = "; ".join(subjects[:3])
+        return summaries[0] if summaries and summaries[0] else subjects[0]
+
+    parts = []
+    for index, subject in enumerate(subjects[:3]):
+        summary = summaries[index] if index < len(summaries) else ""
+        if summary and summary != subject:
+            parts.append(f"{subject} - {_summary_excerpt(summary, 120)}")
+        else:
+            parts.append(subject)
     hidden = group["count"] - 3
     suffix = f"; +{hidden} more" if hidden > 0 else ""
-    return f"{group['count']} messages: {shown_subjects}{suffix}"
+    return f"{group['count']} messages: {'; '.join(parts)}{suffix}"
+
+
+def _summary_excerpt(summary: str, max_length: int) -> str:
+    if len(summary) <= max_length:
+        return summary
+    return f"{summary[: max_length - 3]}..."
 
 
 def _lane_item_payload(

@@ -42,7 +42,7 @@ from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_p
 from mailwyrm.models import GMAIL_MODIFY_SCOPE
 from mailwyrm.oauth import OAuthError, refresh_token, token_is_expired
 from mailwyrm.store import MailwyrmState, read_state, read_token, write_state, write_token
-from mailwyrm.sync import render_sync_summary, sync_mailbox_from_gmail
+from mailwyrm.sync import sync_mailbox_from_gmail
 
 
 DEFAULT_APP_HOST = "127.0.0.1"
@@ -1044,6 +1044,8 @@ def sync_gmail_messages(
         limit=limit,
         mailbox=mailbox,
         include_body=True,
+        include_thread_context=True,
+        thread_context_limit=3,
     )
     return {
         "title": "Gmail Sync",
@@ -1051,19 +1053,21 @@ def sync_gmail_messages(
         "limit": limit,
         "mutated_local_state": True,
         "mutates_gmail": False,
-        "matched_messages": stats.fetched,
-        "message": render_sync_summary(
-            stats,
-            mailbox,
-            state.account_email,
+        "matched_messages": stats.selected_message_refs,
+        "stored_messages": stats.fetched,
+        "message": (
+            f"Synced {stats.selected_message_refs} selected {mailbox} message(s) for "
+            f"{state.account_email or 'unknown account'}. "
+            f"Stored {stats.fetched} local message record(s)."
         ),
         "report_lines": [
-            f"Fetched: {stats.fetched}",
+            f"Selected Gmail messages: {stats.selected_message_refs}",
+            f"Stored local message records: {stats.fetched}",
             f"New: {stats.new}",
             f"Updated: {stats.updated}",
             f"Unchanged: {stats.unchanged}",
             f"Label changes: {stats.label_changes}",
-            "Stored bounded body text for classification and summaries.",
+            "Stored bounded body text and up to 3 message(s) per selected thread for classification and summaries.",
             (
                 "Fetched the full selected mailbox scope."
                 if limit is None

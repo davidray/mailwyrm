@@ -74,7 +74,9 @@ def main(argv: list[str] | None = None) -> int:
             args.limit,
             args.mailbox,
             include_body=args.include_body,
+            include_thread_context=args.include_thread_context,
             body_char_limit=args.body_char_limit,
+            thread_context_limit=args.thread_context_limit,
         )
     if args.command == "sync-history":
         return sync_history_command(args.client_secret, args.max_pages)
@@ -151,6 +153,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=4000,
         type=_non_negative_int,
         help="Max body characters to store per message when --include-body is set.",
+    )
+    sync_parser.add_argument(
+        "--include-thread-context",
+        action="store_true",
+        help=(
+            "When --include-body is set, fetch bounded full Gmail threads for "
+            "selected messages so summaries can use nearby thread context."
+        ),
+    )
+    sync_parser.add_argument(
+        "--thread-context-limit",
+        default=3,
+        type=_positive_int,
+        help="Maximum Gmail thread messages to store per selected thread. Defaults to 3.",
     )
 
     sync_history_parser = subparsers.add_parser(
@@ -615,6 +631,16 @@ def _non_negative_int(value: str) -> int:
     return parsed
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("must be a positive integer") from error
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def auth_command(client_secret: Path, port: int, scope_name: str) -> int:
     token = authorize(client_secret, port=port, scope=scope_for_name(scope_name))
     write_token(token_path(), token)
@@ -628,7 +654,9 @@ def sync_command(
     mailbox: str,
     *,
     include_body: bool = False,
+    include_thread_context: bool = False,
     body_char_limit: int = 4000,
+    thread_context_limit: int = 3,
 ) -> int:
     token = read_token(token_path())
     if token is None:
@@ -647,13 +675,20 @@ def sync_command(
         limit=limit,
         mailbox=mailbox,
         include_body=include_body,
+        include_thread_context=include_thread_context,
         body_char_limit=body_char_limit,
+        thread_context_limit=thread_context_limit,
     )
 
     write_state(state_path(), state)
     print(render_sync_summary(stats, mailbox, state.account_email))
     if include_body:
         print(f"Stored up to {body_char_limit} body character(s) per message.")
+    if include_thread_context:
+        print(
+            f"Stored up to {thread_context_limit} message(s) per selected thread "
+            "for bounded context."
+        )
     print(f"Local index: {state_path()}")
     return 0
 

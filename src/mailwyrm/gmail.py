@@ -93,6 +93,10 @@ class GmailClient:
         encoded = urllib.parse.urlencode({"format": "full"})
         return self._get(f"/users/me/messages/{urllib.parse.quote(message_id)}?{encoded}")
 
+    def get_thread_full(self, thread_id: str) -> dict[str, Any]:
+        encoded = urllib.parse.urlencode({"format": "full"})
+        return self._get(f"/users/me/threads/{urllib.parse.quote(thread_id)}?{encoded}")
+
     def list_history(
         self,
         *,

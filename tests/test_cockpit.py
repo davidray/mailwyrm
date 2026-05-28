@@ -294,8 +294,16 @@ class CockpitTest(unittest.TestCase):
     def test_digest_bundle_payload_groups_same_sender_rows(self) -> None:
         state = MailwyrmState(
             messages={
-                "msg-1": message("msg-1", "Copilot finished one"),
-                "msg-2": message("msg-2", "Copilot finished two"),
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Copilot finished one",
+                    "Build completed with failing lint checks.",
+                ),
+                "msg-2": message_with_body(
+                    "msg-2",
+                    "Copilot finished two",
+                    "Pull request review is ready.",
+                ),
                 "msg-3": MessageRecord(
                     id="msg-3",
                     thread_id="thread-msg-3",
@@ -369,7 +377,8 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(groups[0]["subject"], "")
         self.assertEqual(
             groups[0]["summary"],
-            "2 messages: Copilot finished one; Copilot finished two",
+            "2 messages: Copilot finished one - Build completed with failing lint checks.; "
+            "Copilot finished two - Pull request review is ready.",
         )
         self.assertEqual(groups[1]["sender_email"], "notifications@github.com")
         self.assertEqual(groups[1]["subject"], "Issue update")

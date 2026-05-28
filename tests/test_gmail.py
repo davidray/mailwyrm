@@ -300,6 +300,26 @@ class GmailClientTest(unittest.TestCase):
 
         self.assertEqual(paths[0], "/users/me/messages/msg%201?format=full")
 
+    def test_get_thread_full_requests_full_format(self) -> None:
+        client = GmailClient(
+            GmailToken(
+                access_token="token",
+                expires_at=9999999999,
+                scope="https://www.googleapis.com/auth/gmail.readonly",
+            )
+        )
+        paths = []
+
+        def fake_get(path):
+            paths.append(path)
+            return {"id": "thread-1"}
+
+        client._get = fake_get
+
+        self.assertEqual(client.get_thread_full("thread 1")["id"], "thread-1")
+
+        self.assertEqual(paths[0], "/users/me/threads/thread%201?format=full")
+
     def test_list_history_requests_history_types_and_page_token(self) -> None:
         client = GmailClient(
             GmailToken(

@@ -18,6 +18,7 @@ class SyncStats:
     updated: int = 0
     unchanged: int = 0
     label_changes: int = 0
+    selected_message_refs: int = field(default=0, compare=False)
 
 
 def sync_mailbox_from_gmail(
@@ -27,14 +28,20 @@ def sync_mailbox_from_gmail(
     limit: int | None,
     mailbox: str,
     include_body: bool = False,
+    include_thread_context: bool = False,
     body_char_limit: int = 4000,
+    thread_context_limit: int = 3,
 ) -> SyncStats:
     if limit is not None and limit < 0:
         raise ValueError("limit must be non-negative")
     if body_char_limit < 0:
         raise ValueError("body_char_limit must be non-negative")
+    if thread_context_limit < 1:
+        raise ValueError("thread_context_limit must be positive")
     if mailbox not in SYNC_MAILBOXES:
         raise ValueError("mailbox must be one of inbox, all-mail, or trash")
+    if include_thread_context and not include_body:
+        raise ValueError("thread context requires include_body")
 
     profile = client.profile()
     state.account_email = profile.get("emailAddress")
@@ -46,23 +53,68 @@ def sync_mailbox_from_gmail(
         label_ids=label_ids_for_mailbox(mailbox),
         include_spam_trash=include_spam_trash_for_mailbox(mailbox),
     )
-    stats = SyncStats()
+    stats = SyncStats(selected_message_refs=len(message_refs))
+    fetched_thread_ids: set[str] = set()
     for message_ref in message_refs:
         message_id = str(message_ref["id"])
-        if include_body:
+        thread_id = message_ref.get("threadId")
+        if include_body and include_thread_context and thread_id:
+            if str(thread_id) in fetched_thread_ids:
+                continue
+            fetched_thread_ids.add(str(thread_id))
+            thread = client.get_thread_full(str(thread_id))
+            for thread_message in _bounded_thread_messages(
+                thread.get("messages", []),
+                selected_message_ids={message_id},
+                limit=thread_context_limit,
+            ):
+                record = MessageRecord.from_gmail_message(
+                    thread_message,
+                    body_char_limit=body_char_limit,
+                )
+                stats = refresh_message_from_gmail(state, record, stats)
+        elif include_body:
             message = client.get_message_full(message_id)
             record = MessageRecord.from_gmail_message(
                 message,
                 body_char_limit=body_char_limit,
             )
+            stats = refresh_message_from_gmail(state, record, stats)
         else:
             message = client.get_message_metadata(message_id)
             record = MessageRecord.from_gmail_message(message)
             previous = state.messages.get(record.id)
             if previous is not None and previous.body_text:
                 record = replace(record, body_text=previous.body_text)
-        stats = refresh_message_from_gmail(state, record, stats)
+            stats = refresh_message_from_gmail(state, record, stats)
     return stats
+
+
+def _bounded_thread_messages(
+    messages: list[Any],
+    *,
+    selected_message_ids: set[str],
+    limit: int,
+) -> list[dict[str, Any]]:
+    thread_messages = [message for message in messages if isinstance(message, dict)]
+    if not thread_messages or limit <= 0:
+        return []
+
+    selected_indexes = [
+        index
+        for index, message in enumerate(thread_messages)
+        if str(message.get("id", "")) in selected_message_ids
+    ]
+    if not selected_indexes:
+        return thread_messages[-limit:]
+
+    selected_index = selected_indexes[-1]
+    start = max(0, selected_index - limit + 1)
+    end = selected_index + 1
+    window = thread_messages[start:end]
+    if len(window) < limit:
+        window.extend(thread_messages[end : end + (limit - len(window))])
+    return window
 
 
 def label_ids_for_mailbox(mailbox: str) -> tuple[str, ...] | None:
@@ -112,6 +164,7 @@ def refresh_message_from_gmail(
             updated=stats.updated,
             unchanged=stats.unchanged,
             label_changes=stats.label_changes,
+            selected_message_refs=stats.selected_message_refs,
         )
 
     changed = message_metadata_changed(previous, record)
@@ -122,6 +175,7 @@ def refresh_message_from_gmail(
         updated=stats.updated + int(changed),
         unchanged=stats.unchanged + int(not changed),
         label_changes=stats.label_changes + int(label_changed),
+        selected_message_refs=stats.selected_message_refs,
     )
 
 
