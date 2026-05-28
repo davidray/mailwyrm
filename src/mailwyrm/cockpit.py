@@ -259,10 +259,18 @@ def build_message_detail_payload(
         key=lambda event: event.created_at,
         reverse=True,
     )
+    conversation = _conversation_payload(
+        state,
+        thread_id=message.thread_id,
+        selected_message_id=message.id,
+        mailbox=mailbox,
+    )
 
     return {
         "title": _header(message, "Subject", "(no subject)"),
         "read_only": True,
+        "reply_available": False,
+        "reply_status": "Draft replies are not enabled yet.",
         "message": {
             "message_id": message.id,
             "thread_id": message.thread_id,
@@ -277,6 +285,7 @@ def build_message_detail_payload(
             "body_text": message.body_text,
             "has_body_text": bool(message.body_text),
         },
+        "conversation": conversation,
         "classification": (
             _classification_payload(effective)
             if effective is not None
@@ -320,6 +329,36 @@ def _classification_counts(state: MailwyrmState) -> dict[str, int]:
         )
         counts[classification.category] = counts.get(classification.category, 0) + 1
     return counts
+
+
+def _conversation_payload(
+    state: MailwyrmState,
+    *,
+    thread_id: str,
+    selected_message_id: str,
+    mailbox: str,
+) -> list[dict[str, Any]]:
+    messages = [
+        message
+        for message in state.messages.values()
+        if message.thread_id == thread_id
+    ]
+    messages.sort(key=lambda message: message.internal_date or "")
+    return [
+        {
+            "message_id": message.id,
+            "selected": message.id == selected_message_id,
+            "gmail_url": _gmail_url(message.id, mailbox=mailbox),
+            "subject": _header(message, "Subject", "(no subject)"),
+            "sender": _header(message, "From", "(unknown sender)"),
+            "to": _header(message, "To", ""),
+            "date": _header(message, "Date", ""),
+            "snippet": _clean_snippet(message.snippet),
+            "body_text": message.body_text,
+            "has_body_text": bool(message.body_text),
+        }
+        for message in messages
+    ]
 
 
 def _action_counts(action_plans) -> dict[str, int]:

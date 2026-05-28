@@ -1148,32 +1148,49 @@ function renderMessageDetail(payload) {
   const message = payload.message;
   els.detailTitle.textContent = message.subject;
   els.detailContent.replaceChildren(
-    div("div", { class: "detail-grid" }, [
-      detailField("From", message.sender),
-      detailField("To", message.to || "(not synced)"),
-      detailField("Date", message.date || "(not synced)"),
-      detailField("Thread", message.thread_id),
-      detailField(
-        "Gmail labels",
-        message.label_ids.length ? message.label_ids.join(", ") : "None"
+    div("article", { class: "reading-message" }, [
+      div("div", { class: "reading-header" }, [
+        div("div", {}, [
+          div("p", { class: "reading-from" }, message.sender),
+          message.to ? div("p", { class: "reading-meta" }, `To ${message.to}`) : "",
+          message.date ? div("p", { class: "reading-meta" }, message.date) : "",
+        ]),
+        div("div", { class: "reading-actions" }, [
+          replyPlaceholderButton(payload),
+          link(message.gmail_url, "Open in Gmail", "secondary-link"),
+        ]),
+      ]),
+      div(
+        "div",
+        { class: `reading-body${message.has_body_text ? "" : " muted"}` },
+        message.has_body_text ? message.body_text : message.snippet || "(no local text)"
       ),
-      detailField("Message-ID", message.message_id_header || "(not synced)"),
     ]),
-    detailSection("Classification", classificationLines(payload)),
-    detailSection("Suggested action", actionLines(payload)),
+    conversationSection(payload),
+    div("div", { class: "detail-support-grid" }, [
+      detailSection("Context", contextLines(payload)),
+      detailSection("Classification", classificationLines(payload)),
+      detailSection("Suggested action", actionLines(payload)),
+    ]),
     reviewResolutionSection(payload),
-    detailSection(
-      message.has_body_text ? "Stored body text" : "Snippet",
-      [message.has_body_text ? message.body_text : message.snippet || "(no local text)"],
-      { pre: true }
-    ),
-    auditSection(payload.audit),
-    div("div", { class: "detail-actions" }, [
-      link(message.gmail_url, "Open in Gmail", "secondary-link"),
-    ])
+    auditSection(payload.audit)
   );
   els.detailPanel.hidden = false;
   els.detailPanel.scrollIntoView({ block: "start" });
+}
+
+function replyPlaceholderButton(payload) {
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: "reply-placeholder",
+      title: payload.reply_status || "Draft replies are not enabled yet.",
+      disabled: true,
+    },
+    "Reply"
+  );
+  return button;
 }
 
 function detailField(label, value) {
@@ -1195,6 +1212,55 @@ function detailSection(title, lines, options = {}) {
     div("h3", {}, title),
     content,
   ]);
+}
+
+function contextLines(payload) {
+  const message = payload.message;
+  return [
+    `Thread: ${message.thread_id}`,
+    `Gmail labels: ${message.label_ids.length ? message.label_ids.join(", ") : "None"}`,
+    `Message-ID: ${message.message_id_header || "(not synced)"}`,
+    payload.reply_status || "Draft replies are not enabled yet.",
+  ];
+}
+
+function conversationSection(payload) {
+  const conversation = payload.conversation || [];
+  if (conversation.length <= 1) {
+    return "";
+  }
+  return div("section", { class: "conversation-section" }, [
+    div("div", { class: "conversation-heading" }, [
+      div("h3", {}, "Conversation"),
+      pill(`${conversation.length} messages`),
+    ]),
+    div(
+      "div",
+      { class: "conversation-list" },
+      conversation.map((message) => conversationMessage(message))
+    ),
+  ]);
+}
+
+function conversationMessage(message) {
+  return div(
+    "article",
+    { class: `conversation-message${message.selected ? " selected" : ""}` },
+    [
+      div("div", { class: "conversation-message-header" }, [
+        div("div", {}, [
+          div("strong", {}, message.sender),
+          message.date ? div("span", {}, message.date) : "",
+        ]),
+        message.selected ? pill("open") : subjectButton(message, state.mailbox),
+      ]),
+      div(
+        "p",
+        { class: "conversation-message-preview" },
+        message.has_body_text ? message.body_text : message.snippet || "(no local text)"
+      ),
+    ]
+  );
 }
 
 function classificationLines(payload) {
