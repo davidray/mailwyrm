@@ -18,6 +18,7 @@ from mailwyrm.actions import (
     build_action_plans,
     build_trash_preview,
     complete_conversation,
+    mark_messages_spam,
     message_matches_mailbox,
     trash_digest_bundle,
 )
@@ -150,6 +151,9 @@ def _handler(
                 return
             if parsed_url.path == "/api/machine-bundle/got-it":
                 self._send_machine_bundle_got_it()
+                return
+            if parsed_url.path == "/api/spam-messages":
+                self._send_spam_messages()
                 return
             if parsed_url.path == "/api/followup":
                 self._send_followup()
@@ -520,7 +524,35 @@ def _handler(
                 return
 
             mark_digest_items(state)
-            result = trash_digest_bundle(client, state, plans)
+            try:
+                if machine_type == "spam":
+                    result = mark_messages_spam(
+                        client,
+                        state,
+                        message_ids=[plan.message.id for plan in plans],
+                        reason="User clicked Got it for spam bundle.",
+                        respect_holds=True,
+                    )
+                    message = (
+                        f"Marked {result.applied} spam message(s) in Gmail. "
+                        f"Kept {result.skipped_followup} follow-up and "
+                        f"{result.skipped_read_later} read-later message(s)."
+                    )
+                    skipped_already = result.skipped_already_spam
+                    unsubscribe_available = result.unsubscribe_available
+                else:
+                    result = trash_digest_bundle(client, state, plans)
+                    message = (
+                        f"Moved {result.applied} {bundle.title.lower()} "
+                        "message(s) to Gmail Trash. "
+                        f"Kept {result.skipped_followup} follow-up and "
+                        f"{result.skipped_read_later} read-later message(s)."
+                    )
+                    skipped_already = result.skipped_already_trashed
+                    unsubscribe_available = 0
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
             write_state(state_file, state)
             self._send_json(
                 {
@@ -528,21 +560,65 @@ def _handler(
                     "machine_type": machine_type,
                     "mutated_local_state": True,
                     "mutates_gmail": result.applied > 0,
-                    "message": (
-                        f"Moved {result.applied} {bundle.title.lower()} "
-                        "message(s) to Gmail Trash. "
-                        f"Kept {result.skipped_followup} follow-up and "
-                        f"{result.skipped_read_later} read-later message(s)."
-                    ),
+                    "message": message,
                     "applied": result.applied,
-                    "skipped_already_trashed": result.skipped_already_trashed,
+                    "skipped_already_trashed": skipped_already,
+                    "skipped_already_spam": (
+                        skipped_already if machine_type == "spam" else 0
+                    ),
                     "skipped_followup": result.skipped_followup,
                     "skipped_read_later": result.skipped_read_later,
+                    "unsubscribe_available": unsubscribe_available,
                     "gmail_refresh_hint": (
                         "Gmail may need a browser refresh before the changes are visible."
                     ),
                 }
             )
+
+        def _send_spam_messages(self) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+            if client_secret is None:
+                self._send_json(
+                    {"error": "client secret is required before Gmail can be mutated"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+            try:
+                request = self._read_json_request()
+                message_ids = _request_string_list(request, "message_ids")
+                reason = _optional_request_string(request, "reason") or ""
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_modify_client(client_secret)
+                payload = mark_spam_messages(
+                    client,
+                    state,
+                    message_ids=message_ids,
+                    reason=reason,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            except OAuthError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            write_state(state_file, state)
+            self._send_json(payload)
 
         def _send_followup(self) -> None:
             if not _is_app_mutation_request(self.headers):
@@ -1212,6 +1288,52 @@ def change_digest_category(
         "changed": changed,
         "message_ids": message_ids,
         "machine_type": machine_type,
+    }
+
+
+def mark_spam_messages(
+    client,
+    state: MailwyrmState,
+    *,
+    message_ids: list[str],
+    reason: str = "",
+) -> dict[str, object]:
+    correction_reason = reason or "User marked message as spam."
+    for message_id in message_ids:
+        add_review_resolution(
+            state,
+            message_id=message_id,
+            resolution="machine",
+            machine_type="spam",
+            reason=correction_reason,
+        )
+    result = mark_messages_spam(
+        client,
+        state,
+        message_ids=message_ids,
+        reason=correction_reason,
+    )
+    unsubscribe_note = (
+        f" Found unsubscribe metadata on {result.unsubscribe_available} message(s); "
+        "automatic unsubscribe is not enabled yet."
+        if result.unsubscribe_available
+        else ""
+    )
+    return {
+        "title": "Spam Marked",
+        "mutated_local_state": True,
+        "mutates_gmail": result.applied > 0,
+        "message": (
+            f"Marked {result.applied} message(s) as Spam in Gmail."
+            f"{unsubscribe_note}"
+        ),
+        "message_ids": message_ids,
+        "applied": result.applied,
+        "skipped_already_spam": result.skipped_already_spam,
+        "unsubscribe_available": result.unsubscribe_available,
+        "gmail_refresh_hint": (
+            "Gmail may need a browser refresh before spam changes are visible."
+        ),
     }
 
 

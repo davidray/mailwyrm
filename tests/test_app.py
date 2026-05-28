@@ -22,6 +22,7 @@ from mailwyrm.app import (
     change_digest_category,
     classify_local_messages,
     create_app_server,
+    mark_spam_messages,
     sync_gmail_messages,
 )
 from mailwyrm.cli import build_parser
@@ -107,6 +108,7 @@ class AppTest(unittest.TestCase):
         self.assertIn('params.set("all", "true")', static_root.joinpath("app.js").read_text())
         self.assertIn("workflow.process_all", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/gmail-labels/apply", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/spam-messages", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/archive-after-digest", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/trash-after-digest", static_root.joinpath("app.js").read_text())
         self.assertIn("confirmGmailMutation", static_root.joinpath("app.js").read_text())
@@ -610,6 +612,41 @@ class AppTest(unittest.TestCase):
         self.assertEqual(state.corrections["msg-1"].category, "machine")
         self.assertEqual(state.corrections["msg-2"].machine_type, "product_community")
 
+    def test_mark_spam_messages_records_correction_and_marks_gmail_spam(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-msg-1",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="Snippet",
+                    headers={
+                        "From": "Sender <sender@example.com>",
+                        "Subject": "Promo",
+                        "List-Unsubscribe": "<mailto:unsubscribe@example.com>",
+                    },
+                )
+            },
+            classifications={"msg-1": classification("msg-1")},
+        )
+        client = FakeAppModifyClient()
+
+        result = mark_spam_messages(
+            client,
+            state,
+            message_ids=["msg-1"],
+            reason="User resolved this Review card as Spam.",
+        )
+
+        self.assertEqual(result["title"], "Spam Marked")
+        self.assertEqual(result["applied"], 1)
+        self.assertEqual(result["unsubscribe_available"], 1)
+        self.assertEqual(client.spammed, ["msg-1"])
+        self.assertEqual(state.corrections["msg-1"].machine_type, "spam")
+        self.assertEqual(state.messages["msg-1"].label_ids, ["SPAM"])
+
     def test_app_mutation_request_requires_expected_header(self) -> None:
         self.assertFalse(_is_app_mutation_request({}))
         self.assertFalse(_is_app_mutation_request({APP_MUTATION_HEADER: "other"}))
@@ -726,6 +763,7 @@ class FakeAppModifyClient:
         self.added: list[tuple[str, list[str]]] = []
         self.removed: list[tuple[str, list[str]]] = []
         self.trashed: list[str] = []
+        self.spammed: list[str] = []
 
     def ensure_mailwyrm_labels(self, label_names=None):
         labels = {
@@ -752,3 +790,6 @@ class FakeAppModifyClient:
 
     def trash_message(self, message_id: str) -> None:
         self.trashed.append(message_id)
+
+    def mark_message_spam(self, message_id: str) -> None:
+        self.spammed.append(message_id)

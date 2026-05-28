@@ -205,6 +205,13 @@ class GmailClient:
             {},
         )
 
+    def mark_message_spam(self, message_id: str) -> None:
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=["SPAM"],
+            remove_label_ids=["INBOX", "TRASH"],
+        )
+
     def _get(self, path: str) -> dict[str, Any]:
         return self._request(f"{GMAIL_API_BASE}{path}")
 

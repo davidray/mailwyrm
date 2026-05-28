@@ -11,7 +11,15 @@ from typing import Any
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
-DEFAULT_METADATA_HEADERS = ("From", "To", "Subject", "Date", "Message-ID")
+DEFAULT_METADATA_HEADERS = (
+    "From",
+    "To",
+    "Subject",
+    "Date",
+    "Message-ID",
+    "List-Unsubscribe",
+    "List-Unsubscribe-Post",
+)
 
 MAILWYRM_LABEL_NAMES = (
     "Mailwyrm/Human",

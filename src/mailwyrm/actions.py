@@ -17,8 +17,10 @@ ACTION_COMPLETE_CONVERSATION = "complete_conversation"
 ACTION_RESTORE_ARCHIVE = "restore_archive"
 ACTION_RESTORE_TRASH = "restore_trash"
 ACTION_TRASH_AFTER_DIGEST = "trash_after_digest"
+ACTION_MARK_SPAM = "mark_spam"
 GMAIL_INBOX_LABEL = "INBOX"
 GMAIL_TRASH_LABEL = "TRASH"
+GMAIL_SPAM_LABEL = "SPAM"
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,15 @@ class BundleTrashResult:
     skipped_already_trashed: int = 0
     skipped_followup: int = 0
     skipped_read_later: int = 0
+
+
+@dataclass(frozen=True)
+class SpamApplyResult:
+    applied: int = 0
+    skipped_already_spam: int = 0
+    skipped_followup: int = 0
+    skipped_read_later: int = 0
+    unsubscribe_available: int = 0
 
 
 @dataclass(frozen=True)
@@ -563,6 +574,76 @@ def trash_digest_bundle(
     )
 
 
+def mark_messages_spam(
+    client: GmailClient,
+    state: MailwyrmState,
+    *,
+    message_ids: list[str],
+    reason: str,
+    respect_holds: bool = False,
+) -> SpamApplyResult:
+    applied = 0
+    skipped_already_spam = 0
+    skipped_followup = 0
+    skipped_read_later = 0
+    unsubscribe_available = 0
+
+    for message_id in message_ids:
+        message = state.messages.get(message_id)
+        if message is None:
+            raise ValueError(f"message {message_id} is not in the local index")
+        if respect_holds and message_id in state.followups:
+            skipped_followup += 1
+            continue
+        if respect_holds and message_id in state.read_later:
+            skipped_read_later += 1
+            continue
+        if _has_unsubscribe_header(message):
+            unsubscribe_available += 1
+        if GMAIL_SPAM_LABEL in message.label_ids:
+            skipped_already_spam += 1
+            continue
+
+        client.mark_message_spam(message_id)
+        label_ids = [
+            label_id
+            for label_id in message.label_ids
+            if label_id not in {GMAIL_INBOX_LABEL, GMAIL_TRASH_LABEL}
+        ]
+        if GMAIL_SPAM_LABEL not in label_ids:
+            label_ids.append(GMAIL_SPAM_LABEL)
+        state.messages[message_id] = replace(message, label_ids=label_ids)
+
+        classification = state.classifications.get(message_id)
+        effective = (
+            effective_classification(classification, state.corrections.get(message_id))
+            if classification
+            else None
+        )
+        state.label_audit_events.append(
+            LabelAuditEvent(
+                message_id=message_id,
+                action=ACTION_MARK_SPAM,
+                label_names=[GMAIL_SPAM_LABEL],
+                label_ids=[GMAIL_SPAM_LABEL],
+                reason=reason,
+                classifier_version=(
+                    effective.classifier_version if effective else "manual"
+                ),
+                created_at=datetime.now(UTC).isoformat(),
+            )
+        )
+        applied += 1
+
+    return SpamApplyResult(
+        applied=applied,
+        skipped_already_spam=skipped_already_spam,
+        skipped_followup=skipped_followup,
+        skipped_read_later=skipped_read_later,
+        unsubscribe_available=unsubscribe_available,
+    )
+
+
 def restore_archived_message(
     client: GmailClient,
     state: MailwyrmState,
@@ -664,6 +745,13 @@ def message_matches_mailbox(message: MessageRecord, mailbox: str) -> bool:
     if mailbox == "trash":
         return GMAIL_TRASH_LABEL in message.label_ids
     return GMAIL_INBOX_LABEL in message.label_ids
+
+
+def _has_unsubscribe_header(message: MessageRecord) -> bool:
+    return bool(
+        message.headers.get("List-Unsubscribe")
+        or message.headers.get("List-Unsubscribe-Post")
+    )
 
 
 def _table_field(value: str) -> str:

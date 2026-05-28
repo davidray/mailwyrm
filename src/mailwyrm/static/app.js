@@ -503,6 +503,14 @@ async function updateDigestCategory(messageIds, machineType, select) {
   if (machineType === previousValue) {
     return;
   }
+  if (machineType === "spam") {
+    await markMessagesSpam(
+      messageIds,
+      select,
+      "User moved this digest row to Spam."
+    );
+    return;
+  }
   select.disabled = true;
   try {
     const response = await fetch("/api/digest-category", {
@@ -569,6 +577,14 @@ async function reassignRealPeopleItemToDigest(item, machineType, select) {
   }
   const messageIds =
     item.message_ids && item.message_ids.length ? item.message_ids : [item.message_id];
+  if (machineType === "spam") {
+    await markMessagesSpam(
+      messageIds,
+      select,
+      "User moved this correspondence conversation to Spam."
+    );
+    return;
+  }
   select.disabled = true;
   try {
     const response = await fetch("/api/digest-category", {
@@ -1032,7 +1048,15 @@ function inlineReviewButton(item, resolution, label, machineType, title) {
     },
     label
   );
-  button.addEventListener("click", () =>
+  button.addEventListener("click", () => {
+    if (machineType === "spam") {
+      markMessagesSpam(
+        [item.message_id],
+        button,
+        "User resolved this Review card as Spam."
+      );
+      return;
+    }
     saveReviewResolution({
       messageId: item.message_id,
       resolution,
@@ -1041,9 +1065,55 @@ function inlineReviewButton(item, resolution, label, machineType, title) {
       button,
       renderDetail: false,
       showResult: false,
-    })
-  );
+    });
+  });
   return button;
+}
+
+async function markMessagesSpam(messageIds, control, reason) {
+  const previousText = control.textContent;
+  control.disabled = true;
+  if (control.tagName !== "SELECT") {
+    control.textContent = "Spam";
+  }
+  try {
+    const response = await fetch("/api/spam-messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Mailwyrm-App": "local-ui",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+        mailbox: state.mailbox,
+        reason,
+      }),
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      renderContextFeedback(control, {
+        title: "Spam failed",
+        message: payload.error || "Unable to mark as spam.",
+        tone: "error",
+      });
+      return;
+    }
+    await loadCockpit({ preserveScroll: true });
+  } catch (error) {
+    renderContextFeedback(control, {
+      title: "Spam failed",
+      message: error.message || "Unable to mark as spam.",
+      tone: "error",
+    });
+  } finally {
+    control.disabled = false;
+    if (control.tagName !== "SELECT") {
+      control.textContent = previousText;
+    }
+    if (control.tagName === "SELECT") {
+      control.value = control.dataset.currentValue || "";
+    }
+  }
 }
 
 function machineTypeLabel(type) {

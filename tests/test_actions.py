@@ -4,6 +4,7 @@ from mailwyrm.actions import (
     ACTION_ARCHIVE_AFTER_DIGEST,
     ACTION_COMPLETE_CONVERSATION,
     ACTION_KEEP,
+    ACTION_MARK_SPAM,
     ACTION_PROTECT,
     ACTION_REVIEW,
     ACTION_RESTORE_ARCHIVE,
@@ -14,6 +15,7 @@ from mailwyrm.actions import (
     build_action_plans,
     build_trash_preview,
     complete_conversation,
+    mark_messages_spam,
     plan_action,
     render_action_audit,
     render_action_preview,
@@ -629,6 +631,68 @@ class ActionsTest(unittest.TestCase):
         self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX", "Label_1"])
         self.assertIn("msg-1", state.read_later)
 
+    def test_mark_messages_spam_updates_gmail_state_and_audits(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-1",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX", "Label_1"],
+                    snippet="Snippet",
+                    headers={
+                        "Subject": "Promo",
+                        "List-Unsubscribe": "<mailto:unsubscribe@example.com>",
+                    },
+                )
+            },
+            classifications={"msg-1": classification("msg-1", machine_type="spam")},
+        )
+        client = FakeGmailClient()
+
+        result = mark_messages_spam(
+            client,
+            state,
+            message_ids=["msg-1"],
+            reason="User marked message as spam.",
+        )
+
+        self.assertEqual(result.applied, 1)
+        self.assertEqual(result.unsubscribe_available, 1)
+        self.assertEqual(client.spammed, ["msg-1"])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["Label_1", "SPAM"])
+        self.assertEqual(state.label_audit_events[0].action, ACTION_MARK_SPAM)
+        self.assertEqual(state.label_audit_events[0].label_ids, ["SPAM"])
+
+    def test_mark_messages_spam_skips_holds_when_requested(self) -> None:
+        from mailwyrm.models import FollowUpMarker
+
+        state = MailwyrmState(
+            messages={"msg-1": message("msg-1", label_ids=["INBOX"])},
+            followups={
+                "msg-1": FollowUpMarker(
+                    message_id="msg-1",
+                    reason="Needs care.",
+                    created_at="2026-05-25T00:00:00+00:00",
+                )
+            },
+        )
+        client = FakeGmailClient()
+
+        result = mark_messages_spam(
+            client,
+            state,
+            message_ids=["msg-1"],
+            reason="User clicked Got it for spam bundle.",
+            respect_holds=True,
+        )
+
+        self.assertEqual(result.applied, 0)
+        self.assertEqual(result.skipped_followup, 1)
+        self.assertEqual(client.spammed, [])
+        self.assertEqual(state.messages["msg-1"].label_ids, ["INBOX"])
+
     def test_render_action_audit_reports_recent_events(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", subject="Receipt")},
@@ -785,6 +849,7 @@ class FakeGmailClient:
         self.thread_removed: list[tuple[str, list[str]]] = []
         self.modified: list[tuple[str, list[str], list[str]]] = []
         self.trashed: list[str] = []
+        self.spammed: list[str] = []
 
     def add_labels_to_message(self, message_id: str, label_ids: list[str]) -> None:
         self.added.append((message_id, label_ids))
@@ -806,6 +871,9 @@ class FakeGmailClient:
 
     def trash_message(self, message_id: str) -> None:
         self.trashed.append(message_id)
+
+    def mark_message_spam(self, message_id: str) -> None:
+        self.spammed.append(message_id)
 
 
 def digest_event(message_id: str, classifier_version: str = "rules-v0"):

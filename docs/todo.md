@@ -27,10 +27,7 @@ surface.
    - After Gmail API mutations, tell the user that Gmail web UI may need a refresh before moved, archived, trashed, or labeled messages visibly update.
 
 4. Gmail spam and unsubscribe workflow.
-   - Add an explicit Gmail-mutating spam action for messages the user classifies
-     as Spam.
-   - Report or move confirmed spam to Gmail Spam rather than only moving it to
-     Trash.
+   - Improve the explicit Gmail-mutating spam action after real-world testing.
    - Detect trustworthy unsubscribe options, such as `List-Unsubscribe`, and
      attempt unsubscribe only through safe, auditable flows.
    - Keep unsubscribe attempts user-approved until the trust boundary is clear.
