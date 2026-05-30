@@ -23,6 +23,18 @@ class StoreTest(unittest.TestCase):
                 account_email="user@example.com",
                 history_id="123",
                 last_sync_mailbox="all-mail",
+                last_refresh={
+                    "refreshed_at": "2026-05-30T17:30:00+00:00",
+                    "mode": "history",
+                    "mailbox": "inbox",
+                    "message": "Updated from Gmail.",
+                    "gmail_modified": False,
+                    "history_records": 2,
+                    "messages_fetched": 1,
+                    "label_changes": 3,
+                    "messages_deleted": 0,
+                    "classified_messages": 1,
+                },
                 messages={
                     "msg-1": MessageRecord(
                         id="msg-1",
@@ -103,6 +115,8 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(loaded.account_email, "user@example.com")
         self.assertEqual(loaded.history_id, "123")
         self.assertEqual(loaded.last_sync_mailbox, "all-mail")
+        self.assertEqual(loaded.last_refresh["mode"], "history")
+        self.assertEqual(loaded.last_refresh["label_changes"], 3)
         self.assertEqual(loaded.messages["msg-1"].headers["Subject"], "Hello")
         self.assertEqual(loaded.classifications["msg-1"].category, "needs_review")
         self.assertEqual(loaded.classifications["msg-1"].review_type, "possible_human")

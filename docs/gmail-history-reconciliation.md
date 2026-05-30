@@ -27,6 +27,10 @@ Refresh falls back to a full sync for the selected mailbox scope and classifies
 unclassified messages. The Tools tab keeps a separate full sync control as an
 explicit repair path.
 
+The app stores a concise summary of the most recent Refresh result and shows it
+in the profile menu. This keeps reconciliation legible without adding another
+main-screen status panel.
+
 ## What It Does
 
 `sync-history` reads Gmail history events after the stored cursor and applies

@@ -249,18 +249,70 @@ function renderReviewTabCount(lane) {
 }
 
 function renderProfile(account) {
-  els.profileAvatar.replaceChildren(profileAvatarContent(account));
-  els.profilePopover.replaceChildren(
+  const lines = [
     profileLine("Account", account.email),
     profileLine(
       "Local index",
       `${account.indexed_messages} indexed, ${account.classified_messages} classified`
     ),
     profileLine("Last sync", account.last_sync_mailbox),
+    ...refreshProfileLines(account.last_refresh),
     profileLine("Gmail boundary", "Only explicit actions update Gmail", {
       strong: true,
-    })
-  );
+    }),
+  ];
+  els.profileAvatar.replaceChildren(profileAvatarContent(account));
+  els.profilePopover.replaceChildren(...lines);
+}
+
+function refreshProfileLines(lastRefresh) {
+  if (!lastRefresh) {
+    return [profileLine("Last refresh", "Not yet refreshed from Gmail")];
+  }
+  return [
+    profileLine("Last refresh", formatRefreshTime(lastRefresh.refreshed_at)),
+    profileLine("Refresh mode", refreshModeLabel(lastRefresh.mode)),
+    profileLine(
+      "Refresh changes",
+      [
+        `${lastRefresh.messages_fetched || 0} fetched`,
+        `${lastRefresh.label_changes || 0} label changes`,
+        `${lastRefresh.messages_deleted || 0} deleted locally`,
+        `${lastRefresh.classified_messages || 0} classified`,
+      ].join(", ")
+    ),
+    profileLine(
+      "Gmail modified",
+      lastRefresh.gmail_modified ? "Yes" : "No",
+      { strong: !lastRefresh.gmail_modified }
+    ),
+  ];
+}
+
+function formatRefreshTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function refreshModeLabel(mode) {
+  if (mode === "history") {
+    return "Gmail history";
+  }
+  if (mode === "first-sync") {
+    return "First full sync";
+  }
+  if (mode === "history-expired") {
+    return "Full sync fallback";
+  }
+  return mode || "Unknown";
 }
 
 function profileAvatarContent(account) {
@@ -925,7 +977,7 @@ function messageCard(item, options) {
         div("div", {}, [subjectButton(item, options.mailbox || state.mailbox)]),
         pill(options.badge, explanation),
       ]),
-      options.showReason ? div("p", { class: "reason" }, item.reason) : "",
+      options.showReason && item.reason ? div("p", { class: "reason" }, item.reason) : "",
       options.showSnippet && item.snippet
         ? div("p", { class: "snippet" }, item.snippet)
         : "",
@@ -1432,8 +1484,10 @@ function actionLines(payload) {
   return [
     `Action: ${payload.suggested_action.action}`,
     `Gmail mutation: ${payload.suggested_action.mutates_gmail ? "yes" : "no"}`,
-    `Reason: ${payload.suggested_action.reason}`,
-  ];
+    payload.suggested_action.reason
+      ? `Reason: ${payload.suggested_action.reason}`
+      : "",
+  ].filter(Boolean);
 }
 
 function reviewResolutionSection(payload) {

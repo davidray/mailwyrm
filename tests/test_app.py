@@ -118,6 +118,10 @@ class AppTest(unittest.TestCase):
         self.assertIn("activateTab", static_root.joinpath("app.js").read_text())
         self.assertIn("renderProfile", static_root.joinpath("app.js").read_text())
         self.assertIn("profileInitial", static_root.joinpath("app.js").read_text())
+        self.assertIn("refreshProfileLines", static_root.joinpath("app.js").read_text())
+        self.assertIn("refreshModeLabel", static_root.joinpath("app.js").read_text())
+        self.assertIn("Gmail modified", static_root.joinpath("app.js").read_text())
+        self.assertIn("options.showReason && item.reason", static_root.joinpath("app.js").read_text())
         self.assertIn("Real People", static_root.joinpath("app.js").read_text())
         self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
         self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())
@@ -519,6 +523,10 @@ class AppTest(unittest.TestCase):
         self.assertEqual(client.history_start_ids, ["100"])
         self.assertEqual(client.full_message_ids, ["msg-2"])
         self.assertEqual(state.history_id, "105")
+        self.assertEqual(state.last_refresh["mode"], "history")
+        self.assertEqual(state.last_refresh["history_records"], 1)
+        self.assertEqual(state.last_refresh["messages_fetched"], 1)
+        self.assertFalse(state.last_refresh["gmail_modified"])
         self.assertIn("msg-2", state.messages)
         self.assertIn("msg-2", state.classifications)
 
@@ -535,6 +543,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("No Gmail history cursor was available.", result["report_lines"])
         self.assertEqual(client.history_start_ids, [])
         self.assertEqual(client.thread_ids, ["thread-1"])
+        self.assertEqual(state.last_refresh["mode"], "first-sync")
+        self.assertEqual(state.last_refresh["messages_fetched"], 1)
         self.assertIn("msg-1", state.classifications)
 
     def test_refresh_gmail_from_history_falls_back_when_cursor_expires(self) -> None:
@@ -549,6 +559,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("The stored Gmail history cursor had expired.", result["report_lines"])
         self.assertEqual(client.history_start_ids, ["100"])
         self.assertEqual(client.thread_ids, ["thread-1"])
+        self.assertEqual(state.last_refresh["mode"], "history-expired")
 
     def test_apply_gmail_labels_returns_preview_report_and_audits(self) -> None:
         state = MailwyrmState(

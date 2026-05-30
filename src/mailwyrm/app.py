@@ -1194,7 +1194,7 @@ def refresh_gmail_from_history(
     if not state.history_id:
         sync_stats = _run_full_refresh_sync(client, state, mailbox=mailbox)
         classified = _classify_unclassified_messages(state, mailbox=mailbox)
-        return _full_refresh_payload(
+        payload = _full_refresh_payload(
             state,
             mailbox=mailbox,
             stats=sync_stats,
@@ -1202,6 +1202,8 @@ def refresh_gmail_from_history(
             mode="first-sync",
             reason="No Gmail history cursor was available.",
         )
+        _record_refresh_status(state, payload)
+        return payload
 
     start_history_id = str(state.history_id)
     page_token = None
@@ -1218,7 +1220,7 @@ def refresh_gmail_from_history(
                 raise
             sync_stats = _run_full_refresh_sync(client, state, mailbox=mailbox)
             classified = _classify_unclassified_messages(state, mailbox=mailbox)
-            return _full_refresh_payload(
+            payload = _full_refresh_payload(
                 state,
                 mailbox=mailbox,
                 stats=sync_stats,
@@ -1226,6 +1228,8 @@ def refresh_gmail_from_history(
                 mode="history-expired",
                 reason="The stored Gmail history cursor had expired.",
             )
+            _record_refresh_status(state, payload)
+            return payload
         stats = merge_history_stats(
             stats,
             reconcile_history(
@@ -1241,7 +1245,7 @@ def refresh_gmail_from_history(
             break
 
     classified = _classify_message_ids(state, stats.fetched_message_ids)
-    return {
+    payload = {
         "title": "Gmail Refresh",
         "mailbox": mailbox,
         "refresh_mode": "history",
@@ -1270,6 +1274,8 @@ def refresh_gmail_from_history(
             "Gmail was not modified.",
         ],
     }
+    _record_refresh_status(state, payload)
+    return payload
 
 
 def _run_full_refresh_sync(client, state: MailwyrmState, *, mailbox: str):
@@ -1349,6 +1355,28 @@ def _history_refresh_message(stats: HistoryReconcileStats, classified: int) -> s
         f"Updated from Gmail using {stats.history_records} history record(s). "
         f"Applied {changes} local change(s)."
     )
+
+
+def _record_refresh_status(
+    state: MailwyrmState,
+    payload: dict[str, object],
+) -> None:
+    state.last_refresh = {
+        "refreshed_at": datetime.now(UTC).isoformat(),
+        "mode": payload.get("refresh_mode", "unknown"),
+        "mailbox": payload.get("mailbox", "unknown"),
+        "message": payload.get("message", ""),
+        "gmail_modified": bool(payload.get("mutates_gmail")),
+        "history_records": int(payload.get("history_records") or 0),
+        "messages_fetched": int(
+            payload.get("messages_fetched")
+            or payload.get("stored_messages")
+            or 0
+        ),
+        "label_changes": int(payload.get("label_changes") or 0),
+        "messages_deleted": int(payload.get("messages_deleted") or 0),
+        "classified_messages": int(payload.get("classified_messages") or 0),
+    }
 
 
 def _classify_message_ids(state: MailwyrmState, message_ids: frozenset[str]) -> int:

@@ -70,7 +70,9 @@ It is organized around three first-class tabs and one quieter operational tab:
 
 It shows:
 
-- Account and sync state behind the profile avatar menu.
+- Account and sync state behind the profile avatar menu, including the most
+  recent Gmail refresh mode, change counts, classification count, and Gmail
+  mutation boundary.
 - Optional Real People, machine, and needs-review counts behind a feature flag.
 - Primary attention lanes for human correspondence and protected or uncertain
   messages, including review-type buckets for needs-review mail.

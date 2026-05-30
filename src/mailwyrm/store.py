@@ -24,6 +24,7 @@ class MailwyrmState:
     account_email: str | None = None
     history_id: str | None = None
     last_sync_mailbox: str | None = None
+    last_refresh: dict[str, Any] | None = None
     messages: dict[str, MessageRecord] = field(default_factory=dict)
     classifications: dict[str, ClassificationRecord] = field(default_factory=dict)
     corrections: dict[str, ClassificationCorrection] = field(default_factory=dict)
@@ -70,6 +71,11 @@ class MailwyrmState:
             account_email=data.get("account_email"),
             history_id=data.get("history_id"),
             last_sync_mailbox=data.get("last_sync_mailbox"),
+            last_refresh=(
+                dict(data["last_refresh"])
+                if isinstance(data.get("last_refresh"), dict)
+                else None
+            ),
             messages=messages,
             classifications=classifications,
             corrections=corrections,
@@ -85,6 +91,7 @@ class MailwyrmState:
             "account_email": self.account_email,
             "history_id": self.history_id,
             "last_sync_mailbox": self.last_sync_mailbox,
+            "last_refresh": self.last_refresh,
             "messages": {
                 message_id: message.to_dict()
                 for message_id, message in sorted(self.messages.items())
