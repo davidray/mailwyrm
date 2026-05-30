@@ -70,19 +70,28 @@ els.profileAvatar.addEventListener("click", () => {
   els.profileAvatar.setAttribute("aria-expanded", isOpen ? "false" : "true");
 });
 document.addEventListener("click", (event) => {
-  if (event.target.closest(".profile-menu")) {
-    return;
+  const clickedProfile = event.target.closest(".profile-menu");
+  if (!clickedProfile) {
+    els.profilePopover.hidden = true;
+    els.profileAvatar.setAttribute("aria-expanded", "false");
   }
-  els.profilePopover.hidden = true;
-  els.profileAvatar.setAttribute("aria-expanded", "false");
+  if (
+    !els.detailPanel.hidden &&
+    !event.target.closest("#detail-panel") &&
+    !event.target.closest(".message-link")
+  ) {
+    closeDetailPanel();
+  }
 });
 els.previewClose.addEventListener("click", () => {
   els.previewPanel.hidden = true;
 });
-els.detailClose.addEventListener("click", () => {
+els.detailClose.addEventListener("click", closeDetailPanel);
+
+function closeDetailPanel() {
   els.detailPanel.hidden = true;
   document.body.classList.remove("reader-open");
-});
+}
 
 loadCockpit();
 

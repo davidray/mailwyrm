@@ -188,6 +188,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("Draft replies are not enabled yet.", static_root.joinpath("app.js").read_text())
         self.assertIn("conversationSection", static_root.joinpath("app.js").read_text())
         self.assertIn("conversationOpenButton", static_root.joinpath("app.js").read_text())
+        self.assertIn("closeDetailPanel", static_root.joinpath("app.js").read_text())
+        self.assertIn('event.target.closest("#detail-panel")', static_root.joinpath("app.js").read_text())
         self.assertNotIn("function detailField", static_root.joinpath("app.js").read_text())
         self.assertIn("markdownBlock", static_root.joinpath("app.js").read_text())
         self.assertIn("inlineMarkdownFragment", static_root.joinpath("app.js").read_text())
