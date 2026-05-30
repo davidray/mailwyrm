@@ -312,7 +312,7 @@ def build_message_detail_payload(
         "suggested_action": (
             {
                 "action": plan.action,
-                "reason": plan.reason,
+                "reason": _ui_action_reason(plan),
                 "mutates_gmail": _action_mutates_gmail(plan.action),
             }
             if plan is not None
@@ -609,7 +609,7 @@ def _attention_lanes(
                     message,
                     classification,
                     action=plan.action,
-                    reason=plan.reason,
+                    reason=_ui_action_reason(plan),
                     mailbox=mailbox,
                 )
             )
@@ -858,8 +858,14 @@ def _action_plan_payload(plan, *, mailbox: str) -> dict[str, Any]:
         "review_type": _review_type_payload(plan.classification),
         "confidence": plan.classification.confidence,
         "action": plan.action,
-        "reason": plan.reason,
+        "reason": _ui_action_reason(plan),
     }
+
+
+def _ui_action_reason(plan) -> str:
+    if plan.action == ACTION_PROTECT:
+        return ""
+    return plan.reason
 
 
 def _classification_payload(classification) -> dict[str, Any]:

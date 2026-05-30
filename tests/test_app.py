@@ -121,6 +121,7 @@ class AppTest(unittest.TestCase):
         self.assertIn("refreshProfileLines", static_root.joinpath("app.js").read_text())
         self.assertIn("refreshModeLabel", static_root.joinpath("app.js").read_text())
         self.assertIn("Gmail modified", static_root.joinpath("app.js").read_text())
+        self.assertIn("options.showReason && item.reason", static_root.joinpath("app.js").read_text())
         self.assertIn("Real People", static_root.joinpath("app.js").read_text())
         self.assertIn("show_metrics", static_root.joinpath("app.js").read_text())
         self.assertIn("personGroupCard", static_root.joinpath("app.js").read_text())

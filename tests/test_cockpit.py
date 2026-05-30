@@ -179,6 +179,7 @@ class CockpitTest(unittest.TestCase):
             payload["lanes"]["needs_review"]["items"][0]["action"],
             "protect",
         )
+        self.assertEqual(payload["lanes"]["needs_review"]["items"][0]["reason"], "")
         self.assertEqual(
             payload["lanes"]["needs_review"]["items"][0]["review_type"],
             "security",
@@ -844,6 +845,8 @@ class CockpitTest(unittest.TestCase):
         payload = build_message_detail_payload(state, message_id="msg-1")
 
         self.assertEqual(payload["classification"]["review_type"], "security")
+        self.assertEqual(payload["suggested_action"]["action"], "protect")
+        self.assertEqual(payload["suggested_action"]["reason"], "")
         self.assertTrue(payload["review_resolution"]["available"])
         self.assertEqual(
             [resolution["id"] for resolution in payload["review_resolution"]["resolutions"]],

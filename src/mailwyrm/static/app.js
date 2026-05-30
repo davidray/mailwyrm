@@ -977,7 +977,7 @@ function messageCard(item, options) {
         div("div", {}, [subjectButton(item, options.mailbox || state.mailbox)]),
         pill(options.badge, explanation),
       ]),
-      options.showReason ? div("p", { class: "reason" }, item.reason) : "",
+      options.showReason && item.reason ? div("p", { class: "reason" }, item.reason) : "",
       options.showSnippet && item.snippet
         ? div("p", { class: "snippet" }, item.snippet)
         : "",
@@ -1484,8 +1484,10 @@ function actionLines(payload) {
   return [
     `Action: ${payload.suggested_action.action}`,
     `Gmail mutation: ${payload.suggested_action.mutates_gmail ? "yes" : "no"}`,
-    `Reason: ${payload.suggested_action.reason}`,
-  ];
+    payload.suggested_action.reason
+      ? `Reason: ${payload.suggested_action.reason}`
+      : "",
+  ].filter(Boolean);
 }
 
 function reviewResolutionSection(payload) {
