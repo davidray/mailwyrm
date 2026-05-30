@@ -171,6 +171,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("completeConversation", static_root.joinpath("app.js").read_text())
         self.assertIn("/api/gmail-refresh", static_root.joinpath("app.js").read_text())
         self.assertIn("refreshSuccessLabel", static_root.joinpath("app.js").read_text())
+        self.assertIn('mode !== "error"', static_root.joinpath("app.js").read_text())
+        self.assertIn('els.refresh.removeAttribute("title")', static_root.joinpath("app.js").read_text())
         self.assertIn("complete-conversation", static_root.joinpath("app.css").read_text())
         self.assertIn("undo-complete", static_root.joinpath("app.css").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())

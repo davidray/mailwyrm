@@ -134,6 +134,9 @@ function setRefreshState(mode, message = "") {
   els.refresh.classList.remove("refreshing", "refresh-success");
   els.refresh.disabled = mode === "loading";
   els.refresh.setAttribute("aria-busy", mode === "loading" ? "true" : "false");
+  if (mode !== "error") {
+    els.refresh.removeAttribute("title");
+  }
   if (mode === "loading") {
     els.refresh.classList.add("refreshing");
     els.refresh.textContent = "Refreshing";
@@ -152,7 +155,6 @@ function setRefreshState(mode, message = "") {
     }, 2600);
     return;
   }
-  els.refresh.removeAttribute("title");
   els.refresh.textContent = "Refresh";
 }
 
