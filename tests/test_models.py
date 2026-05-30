@@ -44,6 +44,31 @@ class MessageRecordTest(unittest.TestCase):
             "Elder Christiansen's account & correspondence",
         )
 
+    def test_message_record_canonicalizes_uppercase_gmail_headers(self) -> None:
+        message = {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Snippet",
+            "payload": {
+                "headers": [
+                    {
+                        "name": "FROM",
+                        "value": "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+                    },
+                    {"name": "TO", "value": "Dave <dave@example.com>"},
+                ]
+            },
+        }
+
+        record = MessageRecord.from_gmail_message(message)
+
+        self.assertEqual(
+            record.headers["From"],
+            "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+        )
+        self.assertEqual(record.headers["To"], "Dave <dave@example.com>")
+        self.assertNotIn("FROM", record.headers)
+
     def test_message_record_decodes_html_entities_from_local_state(self) -> None:
         record = MessageRecord.from_dict(
             {
@@ -57,6 +82,25 @@ class MessageRecordTest(unittest.TestCase):
             record.snippet,
             "Please check Elder Christiansen's account.",
         )
+
+    def test_message_record_canonicalizes_uppercase_headers_from_local_state(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "headers": {
+                    "FROM": "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+                    "TO": "Dave <dave@example.com>",
+                },
+            }
+        )
+
+        self.assertEqual(
+            record.headers["From"],
+            "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+        )
+        self.assertEqual(record.headers["To"], "Dave <dave@example.com>")
+        self.assertNotIn("FROM", record.headers)
 
     def test_message_record_removes_tracking_urls_from_local_text(self) -> None:
         record = MessageRecord.from_dict(
