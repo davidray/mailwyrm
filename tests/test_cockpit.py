@@ -406,6 +406,64 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(groups[1]["count"], 1)
         self.assertEqual(groups[1]["subject"], "Second headline")
 
+    def test_digest_summary_omits_tracking_url_noise(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Inside Lucy",
+                    (
+                        "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                        "2026/5/tracking-image-reference.png>\n"
+                        "News <https://eml-peur01.app.blackbaud.net/intv2/j/"
+                        "D9D3D6FF-EC69-451F-9461-1C10D25FB1FA/r/link>\n"
+                        "The President's Monthly Message"
+                    ),
+                )
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="product_community",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+        summary = payload["digest"]["bundles"][0]["sender_groups"][0]["summary"]
+
+        self.assertEqual(summary, "News The President's Monthly Message")
+        self.assertNotIn("https://", summary)
+
+    def test_digest_summary_suppresses_markdown_heading_marker(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Shipment update",
+                    (
+                        "AliceIOT: https://production.alice-iot.app\n"
+                        "# Hi DAVID CHRISTIANSEN\n"
+                        "Your shipment is awaiting customs release."
+                    ),
+                )
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="transactional",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+        summary = payload["digest"]["bundles"][0]["sender_groups"][0]["summary"]
+
+        self.assertIn("Hi DAVID CHRISTIANSEN", summary)
+        self.assertNotIn("# Hi", summary)
+
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(
             MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),
@@ -688,6 +746,8 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(payload["message"]["subject"], "Delivery update")
         self.assertEqual(payload["message"]["body_text"], "Package arrives Friday by 8 PM.")
         self.assertTrue(payload["message"]["has_body_text"])
+        self.assertFalse(payload["reply_available"])
+        self.assertEqual(payload["reply_status"], "Draft replies are not enabled yet.")
         self.assertEqual(payload["classification"]["machine_type"], "delivery")
         self.assertIsNone(payload["classification"]["review_type"])
         self.assertFalse(payload["review_resolution"]["available"])
@@ -695,6 +755,51 @@ class CockpitTest(unittest.TestCase):
         self.assertTrue(payload["suggested_action"]["mutates_gmail"])
         self.assertEqual(payload["audit"][0]["action"], "archive_after_digest")
         self.assertIn("#inbox/msg-1", payload["message"]["gmail_url"])
+
+    def test_build_message_detail_payload_includes_thread_conversation(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": MessageRecord(
+                    id="msg-1",
+                    thread_id="thread-1",
+                    history_id="10",
+                    internal_date="1710000000000",
+                    label_ids=["INBOX"],
+                    snippet="First note.",
+                    headers={
+                        "From": "Ada <ada@example.com>",
+                        "Subject": "Re: Reading",
+                        "Date": "Tue, 26 May 2026 09:00:00 -0600",
+                    },
+                    body_text="First note body.",
+                ),
+                "msg-2": MessageRecord(
+                    id="msg-2",
+                    thread_id="thread-1",
+                    history_id="11",
+                    internal_date="1710000001000",
+                    label_ids=["INBOX"],
+                    snippet="Second note.",
+                    headers={
+                        "From": "Dave <dave@example.com>",
+                        "Subject": "Re: Reading",
+                        "Date": "Tue, 26 May 2026 09:05:00 -0600",
+                    },
+                    body_text="Second note body.",
+                ),
+                "msg-3": message("msg-3", "Other thread"),
+            },
+        )
+
+        payload = build_message_detail_payload(state, message_id="msg-2")
+
+        self.assertEqual(
+            [message["message_id"] for message in payload["conversation"]],
+            ["msg-1", "msg-2"],
+        )
+        self.assertFalse(payload["conversation"][0]["selected"])
+        self.assertTrue(payload["conversation"][1]["selected"])
+        self.assertEqual(payload["conversation"][0]["body_text"], "First note body.")
 
     def test_build_message_detail_payload_handles_unclassified_messages(self) -> None:
         state = MailwyrmState(messages={"msg-1": message("msg-1", "Unclassified")})

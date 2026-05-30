@@ -80,6 +80,7 @@ els.previewClose.addEventListener("click", () => {
 });
 els.detailClose.addEventListener("click", () => {
   els.detailPanel.hidden = true;
+  document.body.classList.remove("reader-open");
 });
 
 loadCockpit();
@@ -422,7 +423,7 @@ function digestRowCard(group, bundle) {
           readLaterButton(group),
         ]),
       ]),
-      group.summary ? div("p", { class: "snippet" }, group.summary) : "",
+      group.summary ? inlineMarkdownElement("p", { class: "snippet" }, group.summary) : "",
       digestRowControls(group, bundle),
     ]),
   ]);
@@ -1148,39 +1149,48 @@ function renderMessageDetail(payload) {
   const message = payload.message;
   els.detailTitle.textContent = message.subject;
   els.detailContent.replaceChildren(
-    div("div", { class: "detail-grid" }, [
-      detailField("From", message.sender),
-      detailField("To", message.to || "(not synced)"),
-      detailField("Date", message.date || "(not synced)"),
-      detailField("Thread", message.thread_id),
-      detailField(
-        "Gmail labels",
-        message.label_ids.length ? message.label_ids.join(", ") : "None"
+    div("article", { class: "reading-message" }, [
+      div("div", { class: "reading-header" }, [
+        div("div", {}, [
+          div("p", { class: "reading-from" }, message.sender),
+          message.to ? div("p", { class: "reading-meta" }, `To ${message.to}`) : "",
+          message.date ? div("p", { class: "reading-meta" }, message.date) : "",
+        ]),
+        div("div", { class: "reading-actions" }, [
+          replyPlaceholderButton(payload),
+          link(message.gmail_url, "Open in Gmail", "secondary-link"),
+        ]),
+      ]),
+      markdownBlock(
+        message.has_body_text ? message.body_text : message.snippet || "(no local text)",
+        `reading-body${message.has_body_text ? "" : " muted"}`
       ),
-      detailField("Message-ID", message.message_id_header || "(not synced)"),
     ]),
-    detailSection("Classification", classificationLines(payload)),
-    detailSection("Suggested action", actionLines(payload)),
+    conversationSection(payload),
+    div("div", { class: "detail-support-grid" }, [
+      detailSection("Context", contextLines(payload)),
+      detailSection("Classification", classificationLines(payload)),
+      detailSection("Suggested action", actionLines(payload)),
+    ]),
     reviewResolutionSection(payload),
-    detailSection(
-      message.has_body_text ? "Stored body text" : "Snippet",
-      [message.has_body_text ? message.body_text : message.snippet || "(no local text)"],
-      { pre: true }
-    ),
-    auditSection(payload.audit),
-    div("div", { class: "detail-actions" }, [
-      link(message.gmail_url, "Open in Gmail", "secondary-link"),
-    ])
+    auditSection(payload.audit)
   );
   els.detailPanel.hidden = false;
-  els.detailPanel.scrollIntoView({ block: "start" });
+  document.body.classList.add("reader-open");
 }
 
-function detailField(label, value) {
-  return div("div", { class: "detail-field" }, [
-    div("span", {}, label),
-    div("strong", {}, value),
-  ]);
+function replyPlaceholderButton(payload) {
+  const button = div(
+    "button",
+    {
+      type: "button",
+      class: "reply-placeholder",
+      title: payload.reply_status || "Draft replies are not enabled yet.",
+      disabled: true,
+    },
+    "Reply"
+  );
+  return button;
 }
 
 function detailSection(title, lines, options = {}) {
@@ -1195,6 +1205,154 @@ function detailSection(title, lines, options = {}) {
     div("h3", {}, title),
     content,
   ]);
+}
+
+function contextLines(payload) {
+  const message = payload.message;
+  return [
+    `Thread: ${message.thread_id}`,
+    `Gmail labels: ${message.label_ids.length ? message.label_ids.join(", ") : "None"}`,
+    `Message-ID: ${message.message_id_header || "(not synced)"}`,
+  ];
+}
+
+function conversationSection(payload) {
+  const conversation = payload.conversation || [];
+  if (conversation.length <= 1) {
+    return "";
+  }
+  return div("section", { class: "conversation-section" }, [
+    div("div", { class: "conversation-heading" }, [
+      div("h3", {}, "Conversation"),
+      pill(`${conversation.length} messages`),
+    ]),
+    div(
+      "div",
+      { class: "conversation-list" },
+      conversation.map((message) => conversationMessage(message))
+    ),
+  ]);
+}
+
+function conversationMessage(message) {
+  return div(
+    "article",
+    { class: `conversation-message${message.selected ? " selected" : ""}` },
+    [
+      div("div", { class: "conversation-message-header" }, [
+        div("div", {}, [
+          div("strong", {}, message.sender),
+          message.date ? div("span", {}, message.date) : "",
+        ]),
+        message.selected ? pill("open") : conversationOpenButton(message),
+      ]),
+      div(
+        "p",
+        { class: "conversation-message-preview" },
+        inlineMarkdownFragment(
+          message.has_body_text ? message.body_text : message.snippet || "(no local text)"
+        )
+      ),
+    ]
+  );
+}
+
+function conversationOpenButton(message) {
+  const button = div("button", { type: "button", class: "message-link" }, "Open");
+  button.addEventListener("click", () => loadMessageDetail(message.message_id, state.mailbox));
+  return button;
+}
+
+function markdownBlock(text, className) {
+  const container = div("div", { class: className });
+  let list = null;
+  const closeList = () => {
+    if (list) {
+      container.append(list);
+      list = null;
+    }
+  };
+
+  for (const rawLine of String(text || "").split(/\n+/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length + 2, 5);
+      container.append(
+        inlineMarkdownElement(`h${level}`, { class: "markdown-heading" }, heading[2])
+      );
+      continue;
+    }
+
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!list) {
+        list = div("ul", { class: "markdown-list" });
+      }
+      list.append(inlineMarkdownElement("li", {}, bullet[1]));
+      continue;
+    }
+
+    closeList();
+    container.append(inlineMarkdownElement("p", {}, line));
+  }
+  closeList();
+  return container;
+}
+
+function inlineMarkdownElement(tag, attrs, text) {
+  const element = div(tag, attrs);
+  element.append(inlineMarkdownFragment(text));
+  return element;
+}
+
+function inlineMarkdownFragment(text) {
+  const fragment = document.createDocumentFragment();
+  const pattern =
+    /(\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*|(https?:\/\/[^\s<>()]+))/gi;
+  let lastIndex = 0;
+  const value = String(text || "");
+  for (const match of value.matchAll(pattern)) {
+    if (match.index > lastIndex) {
+      fragment.append(value.slice(lastIndex, match.index));
+    }
+    if (match[2] && match[3]) {
+      fragment.append(markdownLink(match[3], match[2]));
+    } else if (match[4]) {
+      fragment.append(div("code", { class: "inline-code" }, match[4]));
+    } else if (match[5]) {
+      fragment.append(div("strong", {}, match[5]));
+    } else if (match[6]) {
+      fragment.append(div("em", {}, match[6]));
+    } else if (match[7]) {
+      fragment.append(markdownLink(match[7], markdownLinkLabel(match[7])));
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < value.length) {
+    fragment.append(value.slice(lastIndex));
+  }
+  return fragment;
+}
+
+function markdownLink(href, text) {
+  const cleanedHref = href.replace(/[.,;!?]+$/, "");
+  const anchor = link(cleanedHref, text, "markdown-link");
+  return anchor;
+}
+
+function markdownLinkLabel(href) {
+  try {
+    return new URL(href).hostname || href;
+  } catch {
+    return href;
+  }
 }
 
 function classificationLines(payload) {
@@ -1388,7 +1546,7 @@ function renderDetailError(message) {
   els.detailTitle.textContent = "Message detail error";
   els.detailContent.replaceChildren(div("p", { class: "empty" }, message));
   els.detailPanel.hidden = false;
-  els.detailPanel.scrollIntoView({ block: "start" });
+  document.body.classList.add("reader-open");
 }
 
 function metaLine(item) {

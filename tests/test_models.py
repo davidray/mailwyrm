@@ -44,6 +44,31 @@ class MessageRecordTest(unittest.TestCase):
             "Elder Christiansen's account & correspondence",
         )
 
+    def test_message_record_canonicalizes_uppercase_gmail_headers(self) -> None:
+        message = {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "snippet": "Snippet",
+            "payload": {
+                "headers": [
+                    {
+                        "name": "FROM",
+                        "value": "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+                    },
+                    {"name": "TO", "value": "Dave <dave@example.com>"},
+                ]
+            },
+        }
+
+        record = MessageRecord.from_gmail_message(message)
+
+        self.assertEqual(
+            record.headers["From"],
+            "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+        )
+        self.assertEqual(record.headers["To"], "Dave <dave@example.com>")
+        self.assertNotIn("FROM", record.headers)
+
     def test_message_record_decodes_html_entities_from_local_state(self) -> None:
         record = MessageRecord.from_dict(
             {
@@ -56,6 +81,68 @@ class MessageRecordTest(unittest.TestCase):
         self.assertEqual(
             record.snippet,
             "Please check Elder Christiansen's account.",
+        )
+
+    def test_message_record_canonicalizes_uppercase_headers_from_local_state(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "headers": {
+                    "FROM": "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+                    "TO": "Dave <dave@example.com>",
+                },
+            }
+        )
+
+        self.assertEqual(
+            record.headers["From"],
+            "Lucy Cavendish College <development@lucy.cam.ac.uk>",
+        )
+        self.assertEqual(record.headers["To"], "Dave <dave@example.com>")
+        self.assertNotIn("FROM", record.headers)
+
+    def test_message_record_removes_tracking_urls_from_local_text(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "snippet": (
+                    "Legacy Village Hello Doris Peck! "
+                    "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                    "2026/5/some-very-long-tracking-image-reference.png>"
+                ),
+                "body_text": (
+                    "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                    "2026/5/some-very-long-tracking-image-reference.png>\n"
+                    "News <https://eml-peur01.app.blackbaud.net/intv2/j/"
+                    "D9D3D6FF-EC69-451F-9461-1C10D25FB1FA/r/link>\n"
+                    "The President's Monthly Message"
+                ),
+            }
+        )
+
+        self.assertEqual(record.snippet, "Legacy Village Hello Doris Peck!")
+        self.assertEqual(
+            record.body_text,
+            "News\nThe President's Monthly Message",
+        )
+
+    def test_message_record_preserves_markdown_links_for_rendering(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "body_text": (
+                    "# Hi DAVID\n"
+                    "Click here to pay: [Pay now](https://buy.stripe.com/test)"
+                ),
+            }
+        )
+
+        self.assertEqual(
+            record.body_text,
+            "# Hi DAVID\nClick here to pay: [Pay now](https://buy.stripe.com/test)",
         )
 
     def test_message_record_extracts_bounded_plain_body_text(self) -> None:

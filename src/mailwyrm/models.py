@@ -54,6 +54,19 @@ MACHINE_TYPES = (
     "spam",
     "product_community",
 )
+_CANONICAL_HEADER_NAMES = {
+    header.lower(): header for header in DEFAULT_METADATA_HEADERS
+}
+_CANONICAL_HEADER_NAMES.update(
+    {
+        "reply-to": "Reply-To",
+        "return-path": "Return-Path",
+        "sender": "Sender",
+    }
+)
+_ANGLE_URL_RE = re.compile(r"<https?://[^>\s]+>", re.IGNORECASE)
+_LONG_URL_RE = re.compile(r"https?://\S{60,}", re.IGNORECASE)
+_URL_ONLY_LINE_RE = re.compile(r"^<?https?://\S+>?$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -101,7 +114,7 @@ class MessageRecord:
         payload = message.get("payload") or {}
         raw_headers = payload.get("headers") or []
         headers = {
-            str(header.get("name")): str(header.get("value", ""))
+            _canonical_header_name(str(header.get("name"))): str(header.get("value", ""))
             for header in raw_headers
             if header.get("name")
         }
@@ -129,13 +142,35 @@ class MessageRecord:
             internal_date=data.get("internal_date"),
             label_ids=[str(label) for label in data.get("label_ids", [])],
             snippet=normalize_email_text(data.get("snippet", "")),
-            headers={str(key): str(value) for key, value in data.get("headers", {}).items()},
+            headers={
+                _canonical_header_name(str(key)): str(value)
+                for key, value in data.get("headers", {}).items()
+            },
             body_text=normalize_email_text(data.get("body_text", "")),
         )
 
 
+def _canonical_header_name(name: str) -> str:
+    return _CANONICAL_HEADER_NAMES.get(name.lower(), name)
+
+
 def normalize_email_text(value: Any) -> str:
-    return unescape(str(value))
+    text = unescape(str(value))
+    text = _ANGLE_URL_RE.sub("", text)
+    text = _LONG_URL_RE.sub("", text)
+    return _remove_url_noise_lines(text)
+
+
+def _remove_url_noise_lines(value: str) -> str:
+    lines = []
+    for line in value.splitlines():
+        cleaned = line.strip()
+        if not cleaned or cleaned in {":", "|"} or _URL_ONLY_LINE_RE.match(cleaned):
+            continue
+        lines.append(cleaned)
+    if "\n" in value:
+        return "\n".join(lines)
+    return " ".join(lines)
 
 
 def extract_message_body_text(payload: dict[str, Any], *, char_limit: int) -> str:
