@@ -423,7 +423,7 @@ function digestRowCard(group, bundle) {
           readLaterButton(group),
         ]),
       ]),
-      group.summary ? div("p", { class: "snippet" }, group.summary) : "",
+      group.summary ? inlineMarkdownElement("p", { class: "snippet" }, group.summary) : "",
       digestRowControls(group, bundle),
     ]),
   ]);
@@ -1161,10 +1161,9 @@ function renderMessageDetail(payload) {
           link(message.gmail_url, "Open in Gmail", "secondary-link"),
         ]),
       ]),
-      div(
-        "div",
-        { class: `reading-body${message.has_body_text ? "" : " muted"}` },
-        message.has_body_text ? message.body_text : message.snippet || "(no local text)"
+      markdownBlock(
+        message.has_body_text ? message.body_text : message.snippet || "(no local text)",
+        `reading-body${message.has_body_text ? "" : " muted"}`
       ),
     ]),
     conversationSection(payload),
@@ -1258,10 +1257,104 @@ function conversationMessage(message) {
       div(
         "p",
         { class: "conversation-message-preview" },
-        message.has_body_text ? message.body_text : message.snippet || "(no local text)"
+        inlineMarkdownFragment(
+          message.has_body_text ? message.body_text : message.snippet || "(no local text)"
+        )
       ),
     ]
   );
+}
+
+function markdownBlock(text, className) {
+  const container = div("div", { class: className });
+  let list = null;
+  const closeList = () => {
+    if (list) {
+      container.append(list);
+      list = null;
+    }
+  };
+
+  for (const rawLine of String(text || "").split(/\n+/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeList();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = Math.min(heading[1].length + 2, 5);
+      container.append(
+        inlineMarkdownElement(`h${level}`, { class: "markdown-heading" }, heading[2])
+      );
+      continue;
+    }
+
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!list) {
+        list = div("ul", { class: "markdown-list" });
+      }
+      list.append(inlineMarkdownElement("li", {}, bullet[1]));
+      continue;
+    }
+
+    closeList();
+    container.append(inlineMarkdownElement("p", {}, line));
+  }
+  closeList();
+  return container;
+}
+
+function inlineMarkdownElement(tag, attrs, text) {
+  const element = div(tag, attrs);
+  element.append(inlineMarkdownFragment(text));
+  return element;
+}
+
+function inlineMarkdownFragment(text) {
+  const fragment = document.createDocumentFragment();
+  const pattern =
+    /(\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^)]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*|(https?:\/\/[^\s<>()]+))/gi;
+  let lastIndex = 0;
+  const value = String(text || "");
+  for (const match of value.matchAll(pattern)) {
+    if (match.index > lastIndex) {
+      fragment.append(value.slice(lastIndex, match.index));
+    }
+    if (match[2] && match[3]) {
+      fragment.append(markdownLink(match[3], match[2]));
+    } else if (match[4]) {
+      fragment.append(div("code", { class: "inline-code" }, match[4]));
+    } else if (match[5]) {
+      fragment.append(div("strong", {}, match[5]));
+    } else if (match[6]) {
+      fragment.append(div("em", {}, match[6]));
+    } else if (match[7]) {
+      fragment.append(markdownLink(match[7], markdownLinkLabel(match[7])));
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < value.length) {
+    fragment.append(value.slice(lastIndex));
+  }
+  return fragment;
+}
+
+function markdownLink(href, text) {
+  const cleanedHref = href.replace(/[.,;!?]+$/, "");
+  const anchor = link(cleanedHref, text, "markdown-link");
+  return anchor;
+}
+
+function markdownLinkLabel(href) {
+  try {
+    return new URL(href).hostname || href;
+  } catch {
+    return href;
+  }
 }
 
 function classificationLines(payload) {

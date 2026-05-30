@@ -436,6 +436,34 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(summary, "News The President's Monthly Message")
         self.assertNotIn("https://", summary)
 
+    def test_digest_summary_suppresses_markdown_heading_marker(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Shipment update",
+                    (
+                        "AliceIOT: https://production.alice-iot.app\n"
+                        "# Hi DAVID CHRISTIANSEN\n"
+                        "Your shipment is awaiting customs release."
+                    ),
+                )
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="transactional",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+        summary = payload["digest"]["bundles"][0]["sender_groups"][0]["summary"]
+
+        self.assertIn("Hi DAVID CHRISTIANSEN", summary)
+        self.assertNotIn("# Hi", summary)
+
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(
             MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),

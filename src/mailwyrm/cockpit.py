@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from email.utils import parseaddr
 from shlex import quote
 from datetime import UTC, datetime
@@ -904,6 +905,7 @@ def _header(message, name: str, fallback: str) -> str:
 
 def _clean_snippet(snippet: str) -> str:
     normalized = _single_line(normalize_email_text(snippet))
+    normalized = re.sub(r"(^|\s)#{1,6}\s+", r"\1", normalized)
     if len(normalized) <= 220:
         return normalized
     return f"{normalized[:217]}..."

@@ -128,6 +128,23 @@ class MessageRecordTest(unittest.TestCase):
             "News\nThe President's Monthly Message",
         )
 
+    def test_message_record_preserves_markdown_links_for_rendering(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "body_text": (
+                    "# Hi DAVID\n"
+                    "Click here to pay: [Pay now](https://buy.stripe.com/test)"
+                ),
+            }
+        )
+
+        self.assertEqual(
+            record.body_text,
+            "# Hi DAVID\nClick here to pay: [Pay now](https://buy.stripe.com/test)",
+        )
+
     def test_message_record_extracts_bounded_plain_body_text(self) -> None:
         message = {
             "id": "msg-1",

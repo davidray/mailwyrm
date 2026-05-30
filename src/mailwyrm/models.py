@@ -165,7 +165,7 @@ def _remove_url_noise_lines(value: str) -> str:
     lines = []
     for line in value.splitlines():
         cleaned = line.strip()
-        if not cleaned or _URL_ONLY_LINE_RE.match(cleaned):
+        if not cleaned or cleaned in {":", "|"} or _URL_ONLY_LINE_RE.match(cleaned):
             continue
         lines.append(cleaned)
     if "\n" in value:
