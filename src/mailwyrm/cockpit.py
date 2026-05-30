@@ -23,7 +23,7 @@ from mailwyrm.corrections import effective_classification
 from mailwyrm.digest import build_digest_items
 from mailwyrm.digest import build_digest_bundles
 from mailwyrm.labels import build_label_plans
-from mailwyrm.models import MACHINE_TYPES
+from mailwyrm.models import MACHINE_TYPES, normalize_email_text
 from mailwyrm.store import MailwyrmState
 
 
@@ -903,7 +903,7 @@ def _header(message, name: str, fallback: str) -> str:
 
 
 def _clean_snippet(snippet: str) -> str:
-    normalized = _single_line(snippet)
+    normalized = _single_line(normalize_email_text(snippet))
     if len(normalized) <= 220:
         return normalized
     return f"{normalized[:217]}..."

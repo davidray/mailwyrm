@@ -54,6 +54,9 @@ MACHINE_TYPES = (
     "spam",
     "product_community",
 )
+_ANGLE_URL_RE = re.compile(r"<https?://[^>\s]+>", re.IGNORECASE)
+_LONG_URL_RE = re.compile(r"https?://\S{60,}", re.IGNORECASE)
+_URL_ONLY_LINE_RE = re.compile(r"^<?https?://\S+>?$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -135,7 +138,22 @@ class MessageRecord:
 
 
 def normalize_email_text(value: Any) -> str:
-    return unescape(str(value))
+    text = unescape(str(value))
+    text = _ANGLE_URL_RE.sub("", text)
+    text = _LONG_URL_RE.sub("", text)
+    return _remove_url_noise_lines(text)
+
+
+def _remove_url_noise_lines(value: str) -> str:
+    lines = []
+    for line in value.splitlines():
+        cleaned = line.strip()
+        if not cleaned or _URL_ONLY_LINE_RE.match(cleaned):
+            continue
+        lines.append(cleaned)
+    if "\n" in value:
+        return "\n".join(lines)
+    return " ".join(lines)
 
 
 def extract_message_body_text(payload: dict[str, Any], *, char_limit: int) -> str:

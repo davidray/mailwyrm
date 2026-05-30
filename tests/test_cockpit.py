@@ -406,6 +406,36 @@ class CockpitTest(unittest.TestCase):
         self.assertEqual(groups[1]["count"], 1)
         self.assertEqual(groups[1]["subject"], "Second headline")
 
+    def test_digest_summary_omits_tracking_url_noise(self) -> None:
+        state = MailwyrmState(
+            messages={
+                "msg-1": message_with_body(
+                    "msg-1",
+                    "Inside Lucy",
+                    (
+                        "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                        "2026/5/tracking-image-reference.png>\n"
+                        "News <https://eml-peur01.app.blackbaud.net/intv2/j/"
+                        "D9D3D6FF-EC69-451F-9461-1C10D25FB1FA/r/link>\n"
+                        "The President's Monthly Message"
+                    ),
+                )
+            },
+            classifications={
+                "msg-1": classification(
+                    "msg-1",
+                    category="machine",
+                    machine_type="product_community",
+                )
+            },
+        )
+
+        payload = build_daily_cockpit_payload(state, mailbox="inbox")
+        summary = payload["digest"]["bundles"][0]["sender_groups"][0]["summary"]
+
+        self.assertEqual(summary, "News The President's Monthly Message")
+        self.assertNotIn("https://", summary)
+
     def test_build_daily_cockpit_payload_uses_placeholder_without_client_secret(self) -> None:
         payload = build_daily_cockpit_payload(
             MailwyrmState(messages={"msg-1": message("msg-1", "Receipt")}),

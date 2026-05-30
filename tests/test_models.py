@@ -58,6 +58,32 @@ class MessageRecordTest(unittest.TestCase):
             "Please check Elder Christiansen's account.",
         )
 
+    def test_message_record_removes_tracking_urls_from_local_text(self) -> None:
+        record = MessageRecord.from_dict(
+            {
+                "id": "msg-1",
+                "thread_id": "thread-1",
+                "snippet": (
+                    "Legacy Village Hello Doris Peck! "
+                    "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                    "2026/5/some-very-long-tracking-image-reference.png>"
+                ),
+                "body_text": (
+                    "<https://s22aeml01blkbs02.blob.core.windows.net/emailimages/"
+                    "2026/5/some-very-long-tracking-image-reference.png>\n"
+                    "News <https://eml-peur01.app.blackbaud.net/intv2/j/"
+                    "D9D3D6FF-EC69-451F-9461-1C10D25FB1FA/r/link>\n"
+                    "The President's Monthly Message"
+                ),
+            }
+        )
+
+        self.assertEqual(record.snippet, "Legacy Village Hello Doris Peck!")
+        self.assertEqual(
+            record.body_text,
+            "News\nThe President's Monthly Message",
+        )
+
     def test_message_record_extracts_bounded_plain_body_text(self) -> None:
         message = {
             "id": "msg-1",
