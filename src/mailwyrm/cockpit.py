@@ -401,14 +401,14 @@ def _workflow_controls(
     return [
         {
             "id": "sync",
-            "title": "Sync Gmail",
+            "title": "Full sync from Gmail",
             "phase": "Read",
-            "status": "Gmail read",
+            "status": "Repair",
             "count": None,
             "mutates_gmail": False,
-            "description": "Refresh the full local index from Gmail for this mailbox scope.",
+            "description": "Rebuild the full local index from Gmail for this mailbox scope.",
             "app_action": "sync",
-            "action_label": "Sync Gmail",
+            "action_label": "Run full sync",
             "sync_all": True,
             "primary_command": (
                 "uv run mailwyrm sync"

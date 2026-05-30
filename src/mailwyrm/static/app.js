@@ -10,6 +10,7 @@ const state = {
 const COMPLETE_UNDO_DELAY_MS = 5000;
 const previewableWorkflows = new Set(["daily-preview", "labels", "archive", "trash"]);
 const appActionEndpoints = {
+  refresh: "/api/gmail-refresh",
   sync: "/api/gmail-sync",
   classify: "/api/local-classify",
   labels: "/api/gmail-labels/apply",
@@ -88,17 +89,44 @@ loadCockpit();
 async function refreshCockpit() {
   setRefreshState("loading");
   const startedAt = Date.now();
-  await loadCockpit();
+  let refreshMessage = "Updated";
+  try {
+    const params = new URLSearchParams({
+      mailbox: state.mailbox,
+    });
+    const response = await fetch(`${appActionEndpoints.refresh}?${params}`, {
+      method: "POST",
+      headers: {
+        "X-Mailwyrm-App": "local-ui",
+      },
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to update from Gmail.");
+    }
+    refreshMessage = refreshSuccessLabel(payload);
+    await loadCockpit();
+  } catch (error) {
+    setRefreshState("error", error.message || "Refresh failed");
+    return;
+  }
   const remaining = Math.max(0, 900 - (Date.now() - startedAt));
   window.setTimeout(() => {
-    setRefreshState("success");
+    setRefreshState("success", refreshMessage);
     state.refreshTimer = window.setTimeout(() => {
       setRefreshState("idle");
     }, 1300);
   }, remaining);
 }
 
-function setRefreshState(mode) {
+function refreshSuccessLabel(payload) {
+  if (payload.refresh_mode === "history") {
+    return payload.history_records ? "Updated" : "Current";
+  }
+  return "Synced";
+}
+
+function setRefreshState(mode, message = "") {
   if (state.refreshTimer) {
     window.clearTimeout(state.refreshTimer);
     state.refreshTimer = null;
@@ -113,9 +141,18 @@ function setRefreshState(mode) {
   }
   if (mode === "success") {
     els.refresh.classList.add("refresh-success");
-    els.refresh.textContent = "Refreshed";
+    els.refresh.textContent = message || "Updated";
     return;
   }
+  if (mode === "error") {
+    els.refresh.textContent = "Refresh failed";
+    els.refresh.title = message;
+    state.refreshTimer = window.setTimeout(() => {
+      setRefreshState("idle");
+    }, 2600);
+    return;
+  }
+  els.refresh.removeAttribute("title");
   els.refresh.textContent = "Refresh";
 }
 

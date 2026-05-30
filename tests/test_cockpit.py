@@ -226,7 +226,8 @@ class CockpitTest(unittest.TestCase):
             payload["workflows"][0]["primary_command"],
         )
         self.assertEqual(payload["workflows"][0]["app_action"], "sync")
-        self.assertEqual(payload["workflows"][0]["action_label"], "Sync Gmail")
+        self.assertEqual(payload["workflows"][0]["title"], "Full sync from Gmail")
+        self.assertEqual(payload["workflows"][0]["action_label"], "Run full sync")
         self.assertTrue(payload["workflows"][0]["sync_all"])
         self.assertEqual(payload["workflows"][-1]["status"], "Policy enabled")
         self.assertEqual(payload["workflows"][-1]["count"], 1)

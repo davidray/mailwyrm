@@ -43,7 +43,12 @@ from mailwyrm.labels import apply_label_plans, build_label_plans, render_label_p
 from mailwyrm.models import GMAIL_MODIFY_SCOPE
 from mailwyrm.oauth import OAuthError, refresh_token, token_is_expired
 from mailwyrm.store import MailwyrmState, read_state, read_token, write_state, write_token
-from mailwyrm.sync import sync_mailbox_from_gmail
+from mailwyrm.sync import (
+    HistoryReconcileStats,
+    merge_history_stats,
+    reconcile_history,
+    sync_mailbox_from_gmail,
+)
 
 
 DEFAULT_APP_HOST = "127.0.0.1"
@@ -136,6 +141,9 @@ def _handler(
                 return
             if parsed_url.path == "/api/gmail-sync":
                 self._send_gmail_sync(parsed_url.query)
+                return
+            if parsed_url.path == "/api/gmail-refresh":
+                self._send_gmail_refresh(parsed_url.query)
                 return
             if parsed_url.path == "/api/gmail-labels/apply":
                 self._send_gmail_labels_apply(parsed_url.query)
@@ -275,6 +283,51 @@ def _handler(
             except Exception as error:
                 self._send_json(
                     {"error": f"unexpected Gmail sync error: {error}"},
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+                return
+
+            write_state(state_file, state)
+            self._send_json(payload)
+
+        def _send_gmail_refresh(self, query: str) -> None:
+            if not _is_app_mutation_request(self.headers):
+                self._send_json(
+                    {"error": "local mutation requests must come from the Mailwyrm app"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+
+            params = parse_qs(query)
+            try:
+                request_mailbox = _query_mailbox(params, mailbox)
+                max_pages = _query_int(params, "max_pages", 10)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            state_file = state_path()
+            state = read_state(state_file)
+            try:
+                client = _gmail_read_client(client_secret)
+                payload = refresh_gmail_from_history(
+                    client,
+                    state,
+                    mailbox=request_mailbox,
+                    max_pages=max_pages,
+                )
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except GmailApiError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            except OAuthError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except Exception as error:
+                self._send_json(
+                    {"error": f"unexpected Gmail refresh error: {error}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
                 return
@@ -1124,6 +1177,209 @@ def sync_gmail_messages(
             "Gmail was not modified.",
         ],
     }
+
+
+def refresh_gmail_from_history(
+    client,
+    state: MailwyrmState,
+    *,
+    mailbox: str,
+    max_pages: int = 10,
+) -> dict[str, object]:
+    if max_pages < 1:
+        raise ValueError("max_pages must be positive")
+    if mailbox not in SUPPORTED_MAILBOXES:
+        raise ValueError("mailbox must be one of inbox, all-mail, or trash")
+
+    if not state.history_id:
+        sync_stats = _run_full_refresh_sync(client, state, mailbox=mailbox)
+        classified = _classify_unclassified_messages(state, mailbox=mailbox)
+        return _full_refresh_payload(
+            state,
+            mailbox=mailbox,
+            stats=sync_stats,
+            classified=classified,
+            mode="first-sync",
+            reason="No Gmail history cursor was available.",
+        )
+
+    start_history_id = str(state.history_id)
+    page_token = None
+    pages = 0
+    stats = HistoryReconcileStats()
+    while pages < max_pages:
+        try:
+            response = client.list_history(
+                start_history_id=start_history_id,
+                page_token=page_token,
+            )
+        except GmailApiError as error:
+            if error.status_code != 404:
+                raise
+            sync_stats = _run_full_refresh_sync(client, state, mailbox=mailbox)
+            classified = _classify_unclassified_messages(state, mailbox=mailbox)
+            return _full_refresh_payload(
+                state,
+                mailbox=mailbox,
+                stats=sync_stats,
+                classified=classified,
+                mode="history-expired",
+                reason="The stored Gmail history cursor had expired.",
+            )
+        stats = merge_history_stats(
+            stats,
+            reconcile_history(
+                state,
+                response,
+                client=client,
+                include_body=True,
+            ),
+        )
+        pages += 1
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    classified = _classify_message_ids(state, stats.fetched_message_ids)
+    return {
+        "title": "Gmail Refresh",
+        "mailbox": mailbox,
+        "refresh_mode": "history",
+        "mutated_local_state": _history_refresh_mutated(stats, classified),
+        "mutates_gmail": False,
+        "history_records": stats.history_records,
+        "messages_fetched": stats.messages_fetched,
+        "label_changes": stats.label_changes,
+        "messages_deleted": stats.messages_deleted,
+        "unknown_messages": stats.unknown_messages,
+        "classified_messages": classified,
+        "more_history_available": bool(page_token),
+        "message": _history_refresh_message(stats, classified),
+        "report_lines": [
+            f"History records: {stats.history_records}",
+            f"Fetched messages: {stats.messages_fetched}",
+            f"Label changes: {stats.label_changes}",
+            f"Deleted locally: {stats.messages_deleted}",
+            f"Unknown messages: {stats.unknown_messages}",
+            f"Classified newly fetched messages: {classified}",
+            (
+                "More Gmail history is available; refresh again to continue."
+                if page_token
+                else "Gmail history is up to date."
+            ),
+            "Gmail was not modified.",
+        ],
+    }
+
+
+def _run_full_refresh_sync(client, state: MailwyrmState, *, mailbox: str):
+    return sync_mailbox_from_gmail(
+        client,
+        state,
+        limit=None,
+        mailbox=mailbox,
+        include_body=True,
+        include_thread_context=True,
+        thread_context_limit=3,
+    )
+
+
+def _full_refresh_payload(
+    state: MailwyrmState,
+    *,
+    mailbox: str,
+    stats,
+    classified: int,
+    mode: str,
+    reason: str,
+) -> dict[str, object]:
+    return {
+        "title": "Gmail Refresh",
+        "mailbox": mailbox,
+        "refresh_mode": mode,
+        "mutated_local_state": (
+            stats.fetched > 0
+            or stats.label_changes > 0
+            or classified > 0
+        ),
+        "mutates_gmail": False,
+        "matched_messages": stats.selected_message_refs,
+        "stored_messages": stats.fetched,
+        "classified_messages": classified,
+        "message": (
+            f"Updated from Gmail with a full {mailbox} sync. "
+            f"Stored {stats.fetched} local message record(s)."
+        ),
+        "report_lines": [
+            reason,
+            f"Selected Gmail messages: {stats.selected_message_refs}",
+            f"Stored local message records: {stats.fetched}",
+            f"New: {stats.new}",
+            f"Updated: {stats.updated}",
+            f"Unchanged: {stats.unchanged}",
+            f"Label changes: {stats.label_changes}",
+            f"Classified messages: {classified}",
+            "Gmail was not modified.",
+        ],
+    }
+
+
+def _history_refresh_mutated(stats: HistoryReconcileStats, classified: int) -> bool:
+    return any(
+        [
+            stats.messages_fetched,
+            stats.label_changes,
+            stats.messages_deleted,
+            stats.cursor_advanced,
+            classified,
+        ]
+    )
+
+
+def _history_refresh_message(stats: HistoryReconcileStats, classified: int) -> str:
+    changes = (
+        stats.messages_fetched
+        + stats.label_changes
+        + stats.messages_deleted
+        + classified
+    )
+    if stats.history_records == 0:
+        return "Gmail is already up to date."
+    return (
+        f"Updated from Gmail using {stats.history_records} history record(s). "
+        f"Applied {changes} local change(s)."
+    )
+
+
+def _classify_message_ids(state: MailwyrmState, message_ids: frozenset[str]) -> int:
+    classified = 0
+    for message_id in sorted(message_ids):
+        message = state.messages.get(message_id)
+        if message is None:
+            continue
+        classification = state.classifications.get(message.id)
+        if classification is not None and not _needs_review_type_refresh(classification):
+            continue
+        state.classifications[message.id] = classify_message(message)
+        classified += 1
+    return classified
+
+
+def _classify_unclassified_messages(
+    state: MailwyrmState,
+    *,
+    mailbox: str,
+) -> int:
+    classified = 0
+    for message in state.messages.values():
+        if not message_matches_mailbox(message, mailbox):
+            continue
+        classification = state.classifications.get(message.id)
+        if classification is not None and not _needs_review_type_refresh(classification):
+            continue
+        state.classifications[message.id] = classify_message(message)
+        classified += 1
+    return classified
 
 
 def apply_gmail_labels(

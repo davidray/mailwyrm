@@ -8,7 +8,8 @@ These items remain as the app shell turns CLI workflows into a visible product
 surface.
 
 1. Gmail history reconciliation.
-   - Surface last reconciliation and missed-history recovery status in the app.
+   - Surface last reconciliation and missed-history recovery status in the
+     profile/status surface.
    - Add an explicit periodic reconciliation path once the desktop wrapper owns
      background work.
    - Keep Gmail as the source of truth when local and remote state disagree.

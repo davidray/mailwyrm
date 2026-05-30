@@ -24,6 +24,7 @@ from mailwyrm.app import (
     classify_local_messages,
     create_app_server,
     mark_spam_messages,
+    refresh_gmail_from_history,
     sync_gmail_messages,
 )
 from mailwyrm.actions import BundleTrashResult, SpamApplyResult
@@ -34,7 +35,7 @@ from mailwyrm.models import (
     DigestAuditEvent,
     MessageRecord,
 )
-from mailwyrm.gmail import GmailLabel
+from mailwyrm.gmail import GmailApiError, GmailLabel
 from mailwyrm.store import MailwyrmState
 
 
@@ -168,6 +169,8 @@ class AppTest(unittest.TestCase):
         self.assertIn("scheduleCompleteConversation", static_root.joinpath("app.js").read_text())
         self.assertIn("undoCompleteConversation", static_root.joinpath("app.js").read_text())
         self.assertIn("completeConversation", static_root.joinpath("app.js").read_text())
+        self.assertIn("/api/gmail-refresh", static_root.joinpath("app.js").read_text())
+        self.assertIn("refreshSuccessLabel", static_root.joinpath("app.js").read_text())
         self.assertIn("complete-conversation", static_root.joinpath("app.css").read_text())
         self.assertIn("undo-complete", static_root.joinpath("app.css").read_text())
         self.assertIn("preview-panel", static_root.joinpath("index.html").read_text())
@@ -487,6 +490,64 @@ class AppTest(unittest.TestCase):
         self.assertIsNone(client.list_kwargs["max_results"])
         self.assertEqual(state.messages["msg-1"].body_text, "Body text")
 
+    def test_refresh_gmail_from_history_reconciles_and_classifies_new_messages(
+        self,
+    ) -> None:
+        state = MailwyrmState(
+            history_id="100",
+            account_email="user@example.com",
+        )
+        client = FakeAppSyncClient(
+            history_response={
+                "historyId": "105",
+                "history": [{"messagesAdded": [{"message": {"id": "msg-2"}}]}],
+            }
+        )
+
+        result = refresh_gmail_from_history(client, state, mailbox="inbox")
+
+        self.assertEqual(result["title"], "Gmail Refresh")
+        self.assertEqual(result["refresh_mode"], "history")
+        self.assertEqual(result["history_records"], 1)
+        self.assertEqual(result["messages_fetched"], 1)
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertFalse(result["mutates_gmail"])
+        self.assertIn("Updated from Gmail", result["message"])
+        self.assertIn("Gmail history is up to date.", result["report_lines"])
+        self.assertEqual(client.history_start_ids, ["100"])
+        self.assertEqual(client.full_message_ids, ["msg-2"])
+        self.assertEqual(state.history_id, "105")
+        self.assertIn("msg-2", state.messages)
+        self.assertIn("msg-2", state.classifications)
+
+    def test_refresh_gmail_from_history_runs_full_sync_without_cursor(self) -> None:
+        state = MailwyrmState()
+        client = FakeAppSyncClient()
+
+        result = refresh_gmail_from_history(client, state, mailbox="inbox")
+
+        self.assertEqual(result["refresh_mode"], "first-sync")
+        self.assertEqual(result["matched_messages"], 1)
+        self.assertEqual(result["stored_messages"], 1)
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertIn("No Gmail history cursor was available.", result["report_lines"])
+        self.assertEqual(client.history_start_ids, [])
+        self.assertEqual(client.thread_ids, ["thread-1"])
+        self.assertIn("msg-1", state.classifications)
+
+    def test_refresh_gmail_from_history_falls_back_when_cursor_expires(self) -> None:
+        state = MailwyrmState(history_id="100", last_sync_mailbox="inbox")
+        client = FakeAppSyncClient(history_error=GmailApiError("expired", status_code=404))
+
+        result = refresh_gmail_from_history(client, state, mailbox="inbox")
+
+        self.assertEqual(result["refresh_mode"], "history-expired")
+        self.assertEqual(result["matched_messages"], 1)
+        self.assertEqual(result["classified_messages"], 1)
+        self.assertIn("The stored Gmail history cursor had expired.", result["report_lines"])
+        self.assertEqual(client.history_start_ids, ["100"])
+        self.assertEqual(client.thread_ids, ["thread-1"])
+
     def test_apply_gmail_labels_returns_preview_report_and_audits(self) -> None:
         state = MailwyrmState(
             messages={"msg-1": message("msg-1", "Receipt")},
@@ -765,10 +826,13 @@ class AppTest(unittest.TestCase):
 
 
 class FakeAppSyncClient:
-    def __init__(self) -> None:
+    def __init__(self, *, history_response=None, history_error=None) -> None:
         self.full_message_ids: list[str] = []
         self.thread_ids: list[str] = []
+        self.history_start_ids: list[str] = []
         self.list_kwargs = {}
+        self.history_response = history_response
+        self.history_error = history_error
 
     def profile(self):
         return {"emailAddress": "user@example.com", "historyId": "42"}
@@ -776,6 +840,14 @@ class FakeAppSyncClient:
     def list_messages(self, **kwargs):
         self.list_kwargs = kwargs
         return [{"id": "msg-1", "threadId": "thread-1"}]
+
+    def list_history(self, *, start_history_id, page_token=None):
+        self.history_start_ids.append(start_history_id)
+        if self.history_error is not None:
+            raise self.history_error
+        if self.history_response is not None:
+            return self.history_response
+        return {"historyId": "42", "history": []}
 
     def get_message_full(self, message_id):
         self.full_message_ids.append(message_id)

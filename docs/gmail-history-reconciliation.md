@@ -14,6 +14,19 @@ uv run mailwyrm sync-history --client-secret /path/to/client_secret.json --max-p
 
 Run `mailwyrm sync` first so local state has a Gmail `history_id` cursor.
 
+## App Refresh
+
+The app's top **Refresh** button uses the same reconciliation model.
+
+When a stored Gmail history cursor exists, Refresh reads Gmail history events and
+updates local state from those changes. Newly fetched messages are classified
+locally before the cockpit reloads.
+
+When no cursor exists, or when Gmail reports that the stored cursor is too old,
+Refresh falls back to a full sync for the selected mailbox scope and classifies
+unclassified messages. The Tools tab keeps a separate full sync control as an
+explicit repair path.
+
 ## What It Does
 
 `sync-history` reads Gmail history events after the stored cursor and applies
