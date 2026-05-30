@@ -1193,13 +1193,6 @@ function replyPlaceholderButton(payload) {
   return button;
 }
 
-function detailField(label, value) {
-  return div("div", { class: "detail-field" }, [
-    div("span", {}, label),
-    div("strong", {}, value),
-  ]);
-}
-
 function detailSection(title, lines, options = {}) {
   const content = options.pre
     ? div("pre", { class: "detail-body" }, lines.join("\n"))
@@ -1220,7 +1213,6 @@ function contextLines(payload) {
     `Thread: ${message.thread_id}`,
     `Gmail labels: ${message.label_ids.length ? message.label_ids.join(", ") : "None"}`,
     `Message-ID: ${message.message_id_header || "(not synced)"}`,
-    payload.reply_status || "Draft replies are not enabled yet.",
   ];
 }
 
@@ -1252,7 +1244,7 @@ function conversationMessage(message) {
           div("strong", {}, message.sender),
           message.date ? div("span", {}, message.date) : "",
         ]),
-        message.selected ? pill("open") : subjectButton(message, state.mailbox),
+        message.selected ? pill("open") : conversationOpenButton(message),
       ]),
       div(
         "p",
@@ -1263,6 +1255,12 @@ function conversationMessage(message) {
       ),
     ]
   );
+}
+
+function conversationOpenButton(message) {
+  const button = div("button", { type: "button", class: "message-link" }, "Open");
+  button.addEventListener("click", () => loadMessageDetail(message.message_id, state.mailbox));
+  return button;
 }
 
 function markdownBlock(text, className) {
